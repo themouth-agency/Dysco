@@ -3,7 +3,7 @@
 ## 🎯 Project Overview
 **Digital coupons as Hedera NFTs: claim, trade and redeem in seconds from an ultra-simple mobile app**
 
-## 📊 Current Status: Wallet Management Complete ✅
+## 📊 Current Status: Real Hedera Integration Complete ✅
 
 ### ✅ **COMPLETED FEATURES**
 
@@ -27,6 +27,8 @@
 - [x] Secure wallet storage and retrieval
 - [x] Biometric authentication integration
 - [x] Wallet navigation integration
+- [x] Real Hedera account creation
+- [x] Real balance queries from Mirror Node
 
 #### 🔧 **Backend API (Express + TypeScript)**
 - [x] Express server with TypeScript
@@ -38,6 +40,9 @@
 - [x] Hedera SDK integration (basic setup)
 - [x] Real Hedera account creation endpoint
 - [x] Wallet creation API integration
+- [x] Mirror Node service integration
+- [x] Real HBAR balance queries
+- [x] Account balance endpoint
 
 #### 🎨 **UI/UX Design**
 - [x] Modern, clean design system
@@ -50,7 +55,7 @@
 
 ## 🚧 **IN PROGRESS / NEXT PRIORITIES**
 
-### 🔥 **HIGH PRIORITY (Week 1 - Core Functionality)** ✅ **WALLET COMPLETE**
+### 🔥 **HIGH PRIORITY (Week 1 - Core Functionality)** ✅ **HEDERA INTEGRATION COMPLETE**
 
 #### 💳 **Wallet Management System** ✅ **COMPLETED**
 - [x] Generate Hedera wallets on-device
@@ -63,14 +68,17 @@
 - [x] React Native-compatible crypto libraries (@noble/ed25519)
 - [x] Wallet integration with coupon claiming
 
-#### 🔗 **Real Hedera Integration** 🚧 **IN PROGRESS**
+#### 🔗 **Real Hedera Integration** ✅ **MAJOR PROGRESS**
 - [x] Connect to Hedera testnet (backend configured)
 - [x] Implement actual NFT minting for coupons (backend ready)
 - [x] Real token transfers for claiming (backend ready)
+- [x] Real Hedera account creation from mobile app
+- [x] Mirror Node integration for queries
+- [x] Real HBAR balance queries
 - [ ] Transaction status tracking
 - [ ] Error handling for network issues
 - [ ] Gas fee estimation and display
-- [ ] **NEXT**: Get Hedera testnet credentials and test real transactions
+- [ ] **NEXT**: Test real coupon NFT minting and transfers
 
 #### 📱 **Enhanced Mobile Features**
 - [ ] Real wallet integration in claim flow
@@ -230,27 +238,30 @@
 ## 🏆 **HACKATHON DEMO READINESS**
 
 **Current Demo Capabilities:**
-✅ **Wallet Creation** - Users can create real Hedera wallets
+✅ **Real Hedera Wallets** - Create actual Hedera accounts on testnet
+✅ **Real HBAR Balance** - Query live balance from Mirror Node
 ✅ **Secure Storage** - Wallet data stored securely on device
 ✅ **Biometric Auth** - Face ID/Touch ID integration
 ✅ **Coupon Browsing** - View available coupons
 ✅ **Wallet Integration** - Coupon claims use real wallet addresses
 ✅ **Professional UI** - Clean, modern interface
+✅ **Mirror Node Integration** - Real-time blockchain data queries
 
 **Demo Flow:**
-1. Create wallet with biometric authentication
-2. Browse available coupons
-3. Claim coupon using real wallet
-4. View wallet details and balance
+1. Create real Hedera wallet with biometric authentication
+2. View real HBAR balance from Mirror Node
+3. Browse available coupons
+4. Claim coupon using real wallet address
 5. Show merchant mode (placeholder)
 
 **Next Demo Enhancements:**
-- Real Hedera transactions (need testnet credentials)
+- Real coupon NFT minting and transfers
 - QR code wallet backup/import
 - Merchant QR scanning
 - Transaction history
+- NFT coupon queries from Mirror Node
 
 ---
 
 *Last Updated: July 25, 2025*
-*Status: Wallet Management Complete - Ready for Hedera Integration* 
+*Status: Real Hedera Integration Complete - Ready for NFT Coupons* 
