@@ -1,9 +1,11 @@
-# CoupoFlow Project Status & Planning
+# Dysco Project Status & Planning
 
 ## 🎯 Project Overview
 **Digital coupons as Hedera NFTs: claim, trade and redeem in seconds from an ultra-simple mobile app**
 
-## 📊 Current Status: Real Hedera Integration Complete ✅
+## 📊 Current Status: Production Database Integration & Secure Architecture ✅
+
+**🎉 MAJOR UPDATE: Complete rebrand from CoupoFlow to Dysco!**
 
 ### ✅ **COMPLETED FEATURES**
 
@@ -29,6 +31,14 @@
 - [x] Wallet navigation integration
 - [x] Real Hedera account creation
 - [x] Real balance queries from Mirror Node
+- [x] Mode separation (User vs Merchant navigation)
+- [x] Merchant dashboard screen
+- [x] Create coupon form with validation
+- [x] Merchant wallet service with secure credential storage
+- [x] Transaction signing on merchant device
+- [x] Signed request creation and validation
+- [x] **SECURE device-generated private keys** (never leave device!)
+- [x] **Lazy NFT collection creation** (created on first coupon mint)
 
 #### 🔧 **Backend API (Express + TypeScript)**
 - [x] Express server with TypeScript
@@ -43,19 +53,106 @@
 - [x] Mirror Node service integration
 - [x] Real HBAR balance queries
 - [x] Account balance endpoint
+- [x] Merchant onboarding system with account creation
+- [x] Per-merchant NFT collection creation
+- [x] Merchant account as treasury with co-signing
+- [x] Fee abstraction (operator pays, merchant pays fiat)
+- [x] Merchant-signed coupon creation endpoint
+- [x] Signature validation and authentication
+- [x] Real NFT minting for merchant collections
+- [x] **Device-key-compatible registration** (accepts public keys only)
+- [x] **Campaign-enhanced NFT metadata** (campaign type, limits, audience)
+- [x] **Supabase PostgreSQL database integration** (persistent storage)
+- [x] **Professional data schema** (merchants, NFT coupons with proper relations)
+- [x] **Environment-based database configuration** (graceful fallback to memory)
+- [x] **Production-ready data persistence** (survives server restarts)
 
 #### 🎨 **UI/UX Design**
 - [x] Modern, clean design system
 - [x] Responsive coupon cards
-- [x] Professional color scheme (blue theme)
+- [x] Professional color scheme (blue/green themes)
 - [x] Loading states and error handling
 - [x] Navigation header with action buttons
+- [x] Separate User and Merchant mode interfaces
+- [x] Floating mode switcher for seamless transitions
+
+#### 🏪 **Merchant-Initiated Coupon Creation**
+- [x] Production-ready signing flow
+- [x] Merchant creates coupon on their device
+- [x] Frontend signs transaction with merchant's private key
+- [x] Backend validates merchant and signature
+- [x] Backend co-signs and pays transaction fees
+- [x] Real NFT execution on Hedera testnet
+- [x] Complete separation of user and merchant accounts
+- [x] Secure credential management with biometric auth
+- [x] Merchant dashboard with creation form
+- [x] Form validation and user experience
+
+#### 🗄️ **Database & Infrastructure** 
+- [x] **Supabase PostgreSQL integration** (production-grade database)
+- [x] **Professional schema design** (merchants, NFT coupons with relations)
+- [x] **Persistent storage** (data survives server restarts)
+- [x] **Analytics ready** (SQL queries, dashboards, exports)
+- [x] **Environment-based config** (graceful fallback to memory storage)
+- [x] **Performance optimized** (proper indexing and foreign keys)
+
+#### 🔐 **Web3 Security & Architecture**
+- [x] **Device-generated keypairs** using `@noble/curves/ed25519`
+- [x] **Private keys never leave device** (stored in Expo SecureStore)
+- [x] **Public-key-only backend endpoints** (no private key transmission)
+- [x] **One NFT collection per merchant** (better brand ownership)
+- [x] **Campaign differentiation via metadata** (not separate collections)
+- [x] **Lazy collection creation** (only when first coupon is minted)
+- [x] **Enhanced campaign properties** (type, limits, audience, validity)
 
 ---
 
+## 🎉 **MAJOR ACHIEVEMENTS**
+
+### ✅ **Merchant-Centric Architecture Complete**
+We've successfully implemented a **production-ready, merchant-initiated coupon creation flow**:
+
+1. **🏪 Merchant Experience**: Complete separation with dedicated merchant interface
+2. **🔐 Security**: Merchant signs transactions on their device with biometric auth
+3. **💰 Fee Abstraction**: Merchants pay fiat, we handle all HBAR fees
+4. **🎯 Real NFTs**: Actual Hedera testnet NFT minting with proper HIP-412 metadata
+5. **⚡ Performance**: Frontend signing + backend validation + operator co-signing
+
+This architecture is **exactly what a real production system would use**!
+
+### ✅ **Campaign Management Strategy**
+**Decision: One NFT Collection Per Merchant + Campaign Metadata**
+
+**Why this approach?**
+- ✅ **Better brand ownership** - merchants control their collection
+- ✅ **Lower gas costs** - fewer collection creation transactions  
+- ✅ **Simpler management** - all merchant coupons in one place
+- ✅ **Campaign flexibility** via rich NFT metadata properties
+
+**Campaign Properties in NFT Metadata:**
+```json
+{
+  "properties": {
+    "campaign": "Summer2025",
+    "campaignType": "percentage", 
+    "validFrom": "2025-06-01",
+    "validUntil": "2025-08-31",
+    "maxUsesPerCustomer": 1,
+    "targetAudience": "all",
+    "totalLimit": 1000
+  }
+}
+```
+
+**Campaign Types Supported:**
+- `percentage` - "20% off"
+- `fixed_amount` - "$5 off"  
+- `bogo` - "Buy one get one"
+- `free_shipping` - Free delivery
+
 ## 🚧 **IN PROGRESS / NEXT PRIORITIES**
 
-### 🔥 **HIGH PRIORITY (Week 1 - Core Functionality)** ✅ **HEDERA INTEGRATION COMPLETE**
+### 🔥 **HIGH PRIORITY (Week 2 - Real World Demo)** 🚀 **MERCHANT CREATION COMPLETE**
 
 #### 💳 **Wallet Management System** ✅ **COMPLETED**
 - [x] Generate Hedera wallets on-device
@@ -264,4 +361,20 @@
 ---
 
 *Last Updated: July 25, 2025*
-*Status: Real Hedera Integration Complete - Ready for NFT Coupons* 
+## 🎉 **LATEST ACHIEVEMENTS** 
+
+### ✅ **Professional Database Integration Complete**
+- **Supabase PostgreSQL**: Production-grade database with ACID compliance
+- **Smart Schema**: Merchants keyed by Hedera Account ID, NFT coupons with proper relations
+- **Environment Config**: Graceful fallback to memory storage for development
+- **Performance Optimized**: Proper indexing and foreign key constraints
+- **Analytics Ready**: SQL queries, dashboards, and data export capabilities
+
+### ✅ **Complete Rebrand to Dysco**
+- **App Name**: Changed from CoupoFlow to Dysco across all interfaces
+- **Backend**: Package names, API responses, and collection names updated
+- **Mobile**: Welcome screen, navigation titles, and user messaging updated
+- **Infrastructure**: Project folder, documentation, and setup guides renamed
+- **Consistent Branding**: All user-facing text now reflects Dysco brand
+
+*Status: Production Database + Complete Rebrand - Ready for Hackathon Demo* 🚀 

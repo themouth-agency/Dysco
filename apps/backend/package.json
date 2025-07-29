@@ -1,7 +1,7 @@
 {
-  "name": "coupoflow-backend",
+  "name": "dysco-backend",
   "version": "1.0.0",
-  "description": "CoupoFlow backend API with Hedera integration",
+  "description": "Dysco backend API with Hedera integration",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
@@ -9,11 +9,17 @@
     "dev": "ts-node src/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["hedera", "nft", "coupons", "blockchain"],
-  "author": "CoupoFlow Team",
+  "keywords": [
+    "hedera",
+    "nft",
+    "coupons",
+    "blockchain"
+  ],
+  "author": "Dysco Team",
   "license": "MIT",
   "dependencies": {
     "@hashgraph/sdk": "^2.69.0",
+    "@supabase/supabase-js": "^2.53.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0"

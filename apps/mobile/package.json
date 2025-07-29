@@ -4,13 +4,19 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
+    "@magic-sdk/react-native-expo": "^30.4.0",
+    "@noble/curves": "^1.9.4",
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^1.8.0",
     "@react-navigation/native": "^7.1.14",
     "@react-navigation/stack": "^7.4.2",
+    "@scure/bip32": "^1.7.0",
+    "@scure/bip39": "^1.6.0",
     "expo": "~53.0.20",
     "expo-barcode-scanner": "^13.0.1",
     "expo-camera": "^16.1.11",
@@ -21,6 +27,7 @@
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
     "react-native": "0.79.5",
+    "react-native-get-random-values": "^1.11.0",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.13.1"
   },
