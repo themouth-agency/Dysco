@@ -2,16 +2,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Database interfaces
 export interface MerchantRecord {
-  hedera_account_id: string;
-  id: string;
-  name: string;
+  id: string; // Supabase user ID (primary key)
   email: string;
-  business_type: string;
-  hedera_public_key: string;
+  name?: string;
+  business_name?: string;
+  business_type?: string;
+  hedera_account_id?: string;
+  hedera_public_key?: string;
   nft_collection_id?: string;
   fiat_payment_status: 'pending' | 'paid' | 'failed';
   onboarding_status: 'pending' | 'account_created' | 'collection_created' | 'active';
   created_at: string;
+  updated_at?: string;
   activated_at?: string;
 }
 
@@ -65,16 +67,18 @@ Run this in your Supabase SQL editor:
 
 -- Merchants table
 CREATE TABLE merchants (
-  hedera_account_id VARCHAR(20) PRIMARY KEY,
-  id VARCHAR(50) UNIQUE NOT NULL,
-  name VARCHAR(255) NOT NULL,
+  id VARCHAR(50) PRIMARY KEY, -- Supabase user ID
   email VARCHAR(255) UNIQUE NOT NULL,
-  business_type VARCHAR(100) NOT NULL,
-  hedera_public_key VARCHAR(128) NOT NULL,
+  name VARCHAR(255),
+  business_name VARCHAR(255),
+  business_type VARCHAR(100),
+  hedera_account_id VARCHAR(20),
+  hedera_public_key VARCHAR(128),
   nft_collection_id VARCHAR(20),
   fiat_payment_status VARCHAR(20) DEFAULT 'pending',
   onboarding_status VARCHAR(20) DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
   activated_at TIMESTAMP
 );
 
@@ -83,14 +87,14 @@ CREATE TABLE nft_coupons (
   nft_id VARCHAR(30) PRIMARY KEY,
   token_id VARCHAR(20) NOT NULL,
   serial_number INTEGER NOT NULL,
-  merchant_account_id VARCHAR(20) REFERENCES merchants(hedera_account_id),
+  merchant_account_id VARCHAR(20),
   metadata JSONB NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Indexes for performance
 CREATE INDEX idx_merchants_email ON merchants(email);
-CREATE INDEX idx_merchants_public_key ON merchants(hedera_public_key);
+CREATE INDEX idx_merchants_hedera_account ON merchants(hedera_account_id);
 CREATE INDEX idx_nft_merchant ON nft_coupons(merchant_account_id);
 CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
 
@@ -143,6 +147,25 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
     return data;
   }
 
+  async getMerchantById(id: string): Promise<MerchantRecord | null> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('merchants')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // No rows found
+      throw new Error(`Failed to get merchant: ${error.message}`);
+    }
+
+    return data;
+  }
+
   async getMerchantByPublicKey(publicKey: string): Promise<MerchantRecord | null> {
     if (!this.supabase) {
       throw new Error('Database not connected');
@@ -181,15 +204,21 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
     return data;
   }
 
-  async updateMerchant(accountId: string, updates: Partial<MerchantRecord>): Promise<MerchantRecord> {
+  async updateMerchant(merchantId: string, updates: Partial<MerchantRecord>): Promise<MerchantRecord> {
     if (!this.supabase) {
       throw new Error('Database not connected');
     }
 
+    // Add updated_at timestamp
+    const updatesWithTimestamp = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
     const { data, error } = await this.supabase
       .from('merchants')
-      .update(updates)
-      .eq('hedera_account_id', accountId)
+      .update(updatesWithTimestamp)
+      .eq('id', merchantId)
       .select()
       .single();
 
@@ -341,6 +370,40 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
         totalCollections: 0
       };
     }
+  }
+
+  /**
+   * Create merchant record from Supabase auth user
+   */
+  async createMerchantFromAuth(userId: string, email: string): Promise<MerchantRecord> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('merchants')
+      .insert({
+        id: userId,
+        email: email,
+        name: null,
+        business_name: null,
+        business_type: null,
+        hedera_account_id: null,
+        hedera_public_key: null,
+        nft_collection_id: null,
+        onboarding_status: 'pending',
+        fiat_payment_status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create merchant record: ${error.message}`);
+    }
+
+    return data;
   }
 
   /**

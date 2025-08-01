@@ -12,6 +12,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 import { Coupon } from '../types';
 import { fetchAvailableCoupons } from '../services/api';
+import { userWalletService } from '../services/userWallet';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -23,10 +24,31 @@ export default function HomeScreen({ navigation }: Props) {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasWallet, setHasWallet] = useState<boolean | null>(null);
 
   useEffect(() => {
-    loadCoupons();
+    checkWalletAndLoadData();
   }, []);
+
+  const checkWalletAndLoadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if user has a wallet
+      const isAuthenticated = await userWalletService.isAuthenticated();
+      setHasWallet(isAuthenticated);
+      
+      if (isAuthenticated) {
+        // Only load coupons if user has a wallet
+        await loadCoupons();
+      }
+    } catch (error) {
+      console.error('Error checking wallet status:', error);
+      setHasWallet(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadCoupons = async () => {
     try {
@@ -62,6 +84,34 @@ export default function HomeScreen({ navigation }: Props) {
       </Text>
     </TouchableOpacity>
   );
+
+  // Show wallet creation prompt if user doesn't have a wallet
+  if (hasWallet === false) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.walletPromptContainer}>
+          <Text style={styles.walletPromptTitle}>Welcome to Dysco!</Text>
+          <Text style={styles.walletPromptSubtitle}>
+            Create your Hedera wallet to start collecting and trading digital coupons
+          </Text>
+          
+          <TouchableOpacity
+            style={styles.createWalletButton}
+            onPress={() => navigation.navigate('Wallet')}
+          >
+            <Text style={styles.createWalletButtonText}>Create Wallet</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.recoverWalletButton}
+            onPress={() => navigation.navigate('Wallet')}
+          >
+            <Text style={styles.recoverWalletButtonText}>Recover Existing Wallet</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -189,5 +239,53 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#6b7280',
+  },
+  walletPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  walletPromptTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  walletPromptSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  createWalletButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  createWalletButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  recoverWalletButton: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+  },
+  recoverWalletButtonText: {
+    color: '#2563eb',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 }); 

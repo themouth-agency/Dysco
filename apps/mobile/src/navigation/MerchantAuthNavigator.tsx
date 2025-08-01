@@ -1,26 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { merchantWalletService } from '../services/merchantWallet';
+import { supabaseAuthService } from '../services/supabaseAuth';
 
 // Screens
 import MerchantAuthScreen from '../screens/merchant/MerchantAuthScreen';
 import MerchantDashboardScreen from '../screens/merchant/MerchantDashboardScreen';
 import CreateCouponScreen from '../screens/merchant/CreateCouponScreen';
-import MnemonicBackupScreen from '../screens/merchant/MnemonicBackupScreen';
-import MerchantRecoveryScreen from '../screens/merchant/MerchantRecoveryScreen';
 
 export type MerchantStackParamList = {
   MerchantAuth: undefined;
   MerchantDashboard: undefined;
   CreateCoupon: undefined;
-  MnemonicBackup: {
-    mnemonic: string;
-    merchantData: any;
-    wallet: any;
-    onSuccess: () => void;
-  };
-  MerchantRecovery: undefined;
 };
 
 const Stack = createStackNavigator<MerchantStackParamList>();
@@ -38,7 +29,7 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
 
   const checkAuthStatus = async () => {
     try {
-      const authenticated = await merchantWalletService.isAuthenticated();
+      const authenticated = await supabaseAuthService.isAuthenticated();
       setIsAuthenticated(authenticated);
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -52,7 +43,7 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
 
   const handleMerchantLogout = async () => {
     try {
-      await merchantWalletService.clearCredentials();
+      await supabaseAuthService.signOut();
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Error during logout:', error);
@@ -83,56 +74,18 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
       }}
     >
       {!isAuthenticated ? (
-        // Show auth screen if not authenticated
-        <>
-          <Stack.Screen
-            name="MerchantAuth"
-            options={{ headerShown: false }}
-          >
-            {(props) => (
-              <MerchantAuthScreen 
-                {...props} 
-                onAuthSuccess={handleAuthSuccess}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen 
-            name="MnemonicBackup" 
-            options={{ 
-              title: 'Secure Your Wallet',
-              headerLeft: () => null, // Prevent going back
-            }}
-          >
-            {(props) => (
-              <MnemonicBackupScreen 
-                {...props}
-                mnemonic={props.route.params.mnemonic}
-                onBackupConfirmed={async () => {
-                  const { cryptoWalletService } = await import('../services/cryptoWallet');
-                  await cryptoWalletService.storeWallet(props.route.params.wallet);
-                  await cryptoWalletService.storeMerchantWallet(
-                    props.route.params.wallet.privateKey,
-                    props.route.params.merchantData
-                  );
-                  props.route.params.onSuccess();
-                }}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen 
-            name="MerchantRecovery" 
-            options={{ 
-              title: 'Recover Account',
-            }}
-          >
-            {(props) => (
-              <MerchantRecoveryScreen 
-                {...props}
-                onRecoverySuccess={handleAuthSuccess}
-              />
-            )}
-          </Stack.Screen>
-        </>
+        // Show Supabase auth screen if not authenticated
+        <Stack.Screen
+          name="MerchantAuth"
+          options={{ headerShown: false }}
+        >
+          {(props) => (
+            <MerchantAuthScreen 
+              {...props}
+              onAuthSuccess={handleAuthSuccess}
+            />
+          )}
+        </Stack.Screen>
       ) : (
         // Show main merchant screens if authenticated
         <>
@@ -154,9 +107,8 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
                 </View>
               )
             }}
-          >
-            {(props) => <MerchantDashboardScreen {...props} />}
-          </Stack.Screen>
+          component={MerchantDashboardScreen}
+          />
           <Stack.Screen
             name="CreateCoupon"
             component={CreateCouponScreen}

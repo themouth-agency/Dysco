@@ -17,6 +17,7 @@
     "@react-navigation/stack": "^7.4.2",
     "@scure/bip32": "^1.7.0",
     "@scure/bip39": "^1.6.0",
+    "@supabase/supabase-js": "^2.53.0",
     "expo": "~53.0.20",
     "expo-barcode-scanner": "^13.0.1",
     "expo-camera": "^16.1.11",
@@ -28,8 +29,8 @@
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-get-random-values": "^1.11.0",
-    "react-native-safe-area-context": "^5.5.2",
-    "react-native-screens": "^4.13.1"
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

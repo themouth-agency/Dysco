@@ -51,9 +51,10 @@ export class MerchantWalletService {
    */
   async isAuthenticated(): Promise<boolean> {
     try {
-      const walletData = await SecureStore.getItemAsync(MERCHANT_STORAGE_KEY);
-      const privateKey = await SecureStore.getItemAsync(MERCHANT_PRIVATE_KEY);
-      return !!(walletData && privateKey);
+      // Check if merchant wallet exists in the new cryptoWalletService storage
+      const { cryptoWalletService } = await import('./cryptoWallet');
+      const merchantWallet = await cryptoWalletService.getMerchantWallet();
+      return !!merchantWallet;
     } catch (error) {
       console.error('Error checking merchant authentication:', error);
       return false;
@@ -92,32 +93,29 @@ export class MerchantWalletService {
         return this.merchantCredentials;
       }
 
-      // Check if biometric auth is available and authenticate
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      
-      if (hasHardware && isEnrolled) {
-        const authResult = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to access merchant wallet',
-          fallbackLabel: 'Use passcode',
-        });
-        
-        if (!authResult.success) {
-          throw new Error('Authentication failed');
-        }
-      }
+      // Get merchant wallet from the new cryptoWalletService storage
+      const { cryptoWalletService } = await import('./cryptoWallet');
+      const merchantWallet = await cryptoWalletService.getMerchantWallet();
 
-      const walletDataStr = await SecureStore.getItemAsync(MERCHANT_STORAGE_KEY);
-      const privateKey = await SecureStore.getItemAsync(MERCHANT_PRIVATE_KEY);
-
-      if (!walletDataStr || !privateKey) {
+      if (!merchantWallet || !merchantWallet.merchantData.merchantId) {
         return null;
       }
 
-      const walletData = JSON.parse(walletDataStr) as MerchantWalletData;
-      
+      // Ensure all required fields are present
+      const walletData: MerchantWalletData = {
+        merchantId: merchantWallet.merchantData.merchantId,
+        name: merchantWallet.merchantData.name || '',
+        email: merchantWallet.merchantData.email || '',
+        hederaAccountId: merchantWallet.merchantData.hederaAccountId || '',
+        hederaPublicKey: merchantWallet.merchantData.hederaPublicKey || '',
+        nftCollectionId: merchantWallet.merchantData.nftCollectionId,
+        businessType: merchantWallet.merchantData.businessType || '',
+        onboardingStatus: merchantWallet.merchantData.onboardingStatus || 'pending',
+        createdAt: merchantWallet.merchantData.createdAt || new Date().toISOString()
+      };
+
       this.merchantCredentials = {
-        privateKey,
+        privateKey: merchantWallet.privateKey,
         walletData
       };
 
@@ -184,6 +182,7 @@ export class MerchantWalletService {
 
       // Create a signature of the request data
       const requestString = JSON.stringify(mintRequest);
+      console.log('🔍 Mobile signing request string:', requestString);
       const requestBytes = new TextEncoder().encode(requestString);
       
       // Convert private key from hex to bytes

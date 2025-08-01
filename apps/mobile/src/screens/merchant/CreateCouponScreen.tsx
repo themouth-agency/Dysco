@@ -74,18 +74,18 @@ export default function CreateCouponScreen({ navigation }: Props) {
 
     setIsLoading(true);
     try {
-      // Import merchant wallet service
-      const { merchantWalletService } = await import('../../services/merchantWallet');
+      // Import new merchant service
+      const { merchantService } = await import('../../services/merchantService');
       
       // Check if merchant is authenticated
-      const isAuthenticated = await merchantWalletService.isAuthenticated();
+      const isAuthenticated = await merchantService.isAuthenticated();
       if (!isAuthenticated) {
-        Alert.alert('Error', 'Merchant not authenticated. Please setup your merchant account first.');
+        Alert.alert('Error', 'Merchant not authenticated. Please login first.');
         return;
       }
 
-      // Create signed coupon mint request
-      const result = await merchantWalletService.createCouponMintRequest({
+      // Create coupon mint request (backend will handle signing)
+      const result = await merchantService.createCouponMintRequest({
         name: formData.name,
         description: formData.description,
         value: formData.value,
@@ -95,17 +95,17 @@ export default function CreateCouponScreen({ navigation }: Props) {
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to create signed request');
+        throw new Error(result.error || 'Failed to create request');
       }
 
-      // Send signed request to backend
-      const API_BASE_URL = 'http://192.168.0.162:3001'; // Your backend IP
+      // Send request to backend
+      const API_BASE_URL = 'http://192.168.0.162:3001';
       const response = await fetch(`${API_BASE_URL}/api/merchants/mint-coupon`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(result.signedRequest),
+        body: JSON.stringify(result.request),
       });
 
       const responseData = await response.json();

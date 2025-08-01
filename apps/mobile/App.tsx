@@ -27,12 +27,16 @@ function AppContent() {
   const { mode } = useAppMode();
   const [hasSelectedRole, setHasSelectedRole] = useState(false);
 
+  const handleLogout = () => {
+    setHasSelectedRole(false);
+  };
+
   // Show welcome screen until user selects a role
   if (!hasSelectedRole) {
     return (
-      <WelcomeScreen 
-        navigation={{} as any} 
-        onRoleSelected={() => setHasSelectedRole(true)} 
+      <WelcomeScreen
+        navigation={{} as any}
+        onRoleSelected={() => setHasSelectedRole(true)}
       />
     );
   }
@@ -40,9 +44,9 @@ function AppContent() {
   return (
     <NavigationContainer>
       {mode === 'user' ? (
-        <UserNavigator onLogout={() => setHasSelectedRole(false)} />
+        <UserNavigator onLogout={handleLogout} />
       ) : (
-        <MerchantAuthNavigator onLogout={() => setHasSelectedRole(false)} />
+        <MerchantAuthNavigator onLogout={handleLogout} />
       )}
       <ModeSwitcher />
       <StatusBar style="light" />

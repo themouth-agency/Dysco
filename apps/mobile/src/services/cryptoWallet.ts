@@ -26,9 +26,17 @@ export interface MerchantWalletData {
   createdAt?: string;
 }
 
+export interface UserWalletData {
+  hederaAccountId?: string;
+  hederaPublicKey?: string;
+  balance?: number;
+  createdAt?: string;
+}
+
 class CryptoWalletService {
   private readonly WALLET_KEY = 'crypto_wallet_data';
   private readonly MERCHANT_WALLET_KEY = 'merchant_wallet_data';
+  private readonly USER_WALLET_KEY = 'user_wallet_data';
 
   /**
    * Generate a new 12-word mnemonic phrase
@@ -315,6 +323,126 @@ class CryptoWalletService {
       positions: positions.map(p => p + 1), // Convert to 1-indexed for display
       words: positions.map(p => words[p])
     };
+  }
+
+  // ============================================================================
+  // USER WALLET METHODS
+  // ============================================================================
+
+  /**
+   * Generate a new user wallet with mnemonic phrase
+   */
+  async generateUserWallet(): Promise<{ mnemonic: string; privateKey: string; publicKey: string }> {
+    const mnemonic = this.generateMnemonic();
+    const { privateKey, publicKey } = await this.deriveKeyFromMnemonic(mnemonic);
+    
+    console.log('✅ Generated user wallet with mnemonic');
+    return { mnemonic, privateKey, publicKey };
+  }
+
+  /**
+   * Store user wallet securely with mnemonic phrase
+   */
+  async storeUserWallet(walletData: {
+    mnemonic: string;
+    privateKey: string;
+    publicKey: string;
+    userData: UserWalletData;
+  }): Promise<void> {
+    try {
+      const userWallet = {
+        mnemonic: walletData.mnemonic,
+        privateKey: walletData.privateKey,
+        publicKey: walletData.publicKey,
+        userData: walletData.userData,
+        createdAt: new Date().toISOString()
+      };
+
+      const walletJson = JSON.stringify(userWallet);
+      
+      // Store with biometric authentication if available
+      const isBiometricAvailable = await this.isBiometricAvailable();
+      await SecureStore.setItemAsync(this.USER_WALLET_KEY, walletJson, {
+        requireAuthentication: isBiometricAvailable,
+        authenticationPrompt: 'Authenticate to save your user wallet'
+      });
+
+      console.log('✅ User wallet stored securely');
+    } catch (error) {
+      console.error('Error storing user wallet:', error);
+      throw new Error('Failed to store user wallet');
+    }
+  }
+
+  /**
+   * Get user wallet (with biometric auth if enabled)
+   */
+  async getUserWallet(): Promise<{
+    mnemonic: string;
+    privateKey: string;
+    publicKey: string;
+    userData: UserWalletData;
+  } | null> {
+    try {
+      const isBiometricAvailable = await this.isBiometricAvailable();
+      const walletJson = await SecureStore.getItemAsync(this.USER_WALLET_KEY, {
+        requireAuthentication: isBiometricAvailable,
+        authenticationPrompt: 'Authenticate to access your user wallet'
+      });
+      
+      if (!walletJson) {
+        return null;
+      }
+      
+      const wallet = JSON.parse(walletJson);
+      return wallet;
+    } catch (error) {
+      console.error('Error getting user wallet:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear user wallet from secure storage
+   */
+  async clearUserWallet(): Promise<void> {
+    try {
+      await SecureStore.deleteItemAsync(this.USER_WALLET_KEY);
+      console.log('✅ User wallet cleared');
+    } catch (error) {
+      console.error('Error clearing user wallet:', error);
+    }
+  }
+
+  /**
+   * Check if user wallet exists
+   */
+  async hasUserWallet(): Promise<boolean> {
+    try {
+      const walletJson = await SecureStore.getItemAsync(this.USER_WALLET_KEY);
+      return !!walletJson;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Recover user wallet from mnemonic phrase
+   */
+  async recoverUserWallet(mnemonic: string): Promise<{ privateKey: string; publicKey: string } | null> {
+    try {
+      if (!this.validateMnemonic(mnemonic)) {
+        throw new Error('Invalid mnemonic phrase');
+      }
+
+      const { privateKey, publicKey } = await this.deriveKeyFromMnemonic(mnemonic);
+      console.log('✅ User wallet recovered from mnemonic');
+      
+      return { privateKey, publicKey };
+    } catch (error) {
+      console.error('Error recovering user wallet:', error);
+      return null;
+    }
   }
 }
 

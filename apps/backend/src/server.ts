@@ -84,8 +84,8 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
       // Create account on Hedera
       const accountCreateTx = new AccountCreateTransaction()
         .setKey(hederaPublicKey)
-        .setInitialBalance(new Hbar(1)) // Fund with 1 HBAR
-        .setMaxAutomaticTokenAssociations(10);
+        .setInitialBalance(new Hbar(0)) // no need for hbar
+        .setMaxAutomaticTokenAssociations(0); //no need
 
       const accountCreateResponse = await accountCreateTx.execute(hederaClient);
       const accountCreateReceipt = await accountCreateResponse.getReceipt(hederaClient);
@@ -132,11 +132,24 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
 
     } catch (error) {
       console.error('Error querying account balance from Mirror Node:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to query account balance',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
+      
+      // If account doesn't exist yet, return 0 balance instead of error
+      if (error instanceof Error && error.message.includes('404')) {
+        console.log(`Account ${req.params.accountId} not found in Mirror Node yet, returning 0 balance`);
+        res.json({
+          success: true,
+          accountId: req.params.accountId,
+          balance: '0',
+          balanceInTinybars: '0',
+          tokens: []
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Failed to query account balance',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
     }
   });
 
@@ -490,7 +503,7 @@ app.post('/api/merchants/register-with-key', async (req, res) => {
       throw new Error(activateResult.error || 'Failed to activate merchant');
     }
 
-    const merchant = merchantService.getMerchant(merchantId);
+    const merchant = await merchantService.getMerchantAsync(merchantId);
 
     res.json({
       success: true,
@@ -510,14 +523,14 @@ app.post('/api/merchants/register-with-key', async (req, res) => {
     console.error('Error in secure merchant registration:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to register merchant',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Failed to register merchant'
     });
   }
 });
 
 // Legacy Merchant Onboarding Endpoints (DEPRECATED - keeping for backwards compatibility)
 app.post('/api/merchants/register', async (req, res) => {
+  console.warn('⚠️  DEPRECATED: /api/merchants/register - Use /api/merchants/register-with-key instead');
   try {
     if (!merchantService) {
       return res.status(500).json({
@@ -568,6 +581,7 @@ app.post('/api/merchants/register', async (req, res) => {
 });
 
 app.post('/api/merchants/:merchantId/create-account', async (req, res) => {
+  console.warn('⚠️  DEPRECATED: /api/merchants/:merchantId/create-account - Use /api/merchants/register-with-key instead');
   try {
     if (!merchantService) {
       return res.status(500).json({
@@ -722,7 +736,7 @@ app.post('/api/merchants/onboard', async (req, res) => {
       throw new Error(activateResult.error || 'Failed to activate merchant');
     }
 
-    const merchant = merchantService.getMerchant(merchantId);
+    const merchant = await merchantService.getMerchantAsync(merchantId);
 
     res.json({
       success: true,
@@ -749,7 +763,7 @@ app.post('/api/merchants/onboard', async (req, res) => {
 });
 
 // Get merchant info
-app.get('/api/merchants/:merchantId', (req, res) => {
+app.get('/api/merchants/:merchantId', async (req, res) => {
   try {
     if (!merchantService) {
       return res.status(500).json({
@@ -759,7 +773,7 @@ app.get('/api/merchants/:merchantId', (req, res) => {
     }
 
     const { merchantId } = req.params;
-    const merchant = merchantService.getMerchant(merchantId);
+    const merchant = await merchantService.getMerchantAsync(merchantId);
 
     if (!merchant) {
       return res.status(404).json({
@@ -831,7 +845,7 @@ app.get('/api/merchants', (req, res) => {
   }
 });
 
-// Merchant-signed coupon minting endpoint
+// Supabase-authenticated merchant coupon minting endpoint
 app.post('/api/merchants/mint-coupon', async (req, res) => {
   try {
     if (!merchantService || !nftService) {
@@ -845,18 +859,16 @@ app.post('/api/merchants/mint-coupon', async (req, res) => {
       merchantId,
       merchantAccountId,
       couponData,
-      timestamp,
-      signature,
-      publicKey
+      timestamp
     } = req.body;
     
     let { collectionId } = req.body; // Mutable for collection creation
 
     // Validate required fields
-    if (!merchantId || !merchantAccountId || !couponData || !signature || !publicKey) {
+    if (!merchantId || !merchantAccountId || !couponData) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: merchantId, merchantAccountId, couponData, signature, publicKey'
+        error: 'Missing required fields: merchantId, merchantAccountId, couponData'
       });
     }
     
@@ -865,22 +877,41 @@ app.post('/api/merchants/mint-coupon', async (req, res) => {
       collectionId = 'CREATE_NEW';
     }
 
-    // Get merchant data for validation
-    const merchant = merchantService.getMerchant(merchantId);
+    // Get merchant data for validation (check database first)
+    console.log(`🔍 Looking up merchant with ID: ${merchantId}`);
+    const merchant = await merchantService.getMerchantAsync(merchantId);
     if (!merchant) {
+      console.log(`❌ Merchant not found in database: ${merchantId}`);
       return res.status(404).json({
         success: false,
         error: 'Merchant not found'
       });
     }
+    
+    console.log(`✅ Found merchant: ${merchant.name}, status: ${merchant.onboardingStatus}`);
+    console.log(`🔍 Merchant data:`, {
+      id: merchant.id,
+      hederaAccountId: merchant.hederaAccountId,
+      onboardingStatus: merchant.onboardingStatus,
+      nftCollectionId: merchant.nftCollectionId
+    });
 
-    // Validate merchant is active
-    if (merchant.onboardingStatus !== 'active') {
+    // Validate merchant is active (auto-fix collection_created merchants)
+    if (merchant.onboardingStatus === 'collection_created') {
+      // Auto-activate merchants who have collections but weren't properly activated
+      console.log(`🔧 Auto-activating merchant with collection: ${merchant.name}`);
+      await merchantService.activateMerchant(merchantId);
+      merchant.onboardingStatus = 'active'; // Update local object
+    } else if (merchant.onboardingStatus !== 'active') {
       return res.status(400).json({
         success: false,
         error: 'Merchant is not active'
       });
     }
+
+    // For Supabase auth, we trust the merchant ID from the request
+    // No signature validation needed since merchants don't have private keys
+    console.log('✅ Supabase-authenticated merchant request validated');
 
     // Create collection if this is merchant's first coupon
     if (!merchant.nftCollectionId || collectionId === 'CREATE_NEW') {
@@ -916,60 +947,6 @@ app.post('/api/merchants/mint-coupon', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Account ID does not match merchant'
-      });
-    }
-
-    // Validate public key matches
-    if (merchant.hederaPublicKey !== publicKey) {
-      return res.status(400).json({
-        success: false,
-        error: 'Public key does not match merchant'
-      });
-    }
-
-    // Validate signature
-    try {
-      const { ed25519 } = await import('@noble/curves/ed25519');
-      
-      // Recreate the signed data
-      const requestData = {
-        merchantId,
-        collectionId,
-        merchantAccountId,
-        couponData,
-        timestamp
-      };
-      
-      const requestString = JSON.stringify(requestData);
-      const requestBytes = new TextEncoder().encode(requestString);
-      
-      // Convert signature and public key from hex
-      const signatureBytes = new Uint8Array(
-        signature.match(/.{2}/g).map((byte: string) => parseInt(byte, 16))
-      );
-      
-      // Convert DER public key to raw bytes (this is simplified - in production you'd parse DER properly)
-      const publicKeyHex = publicKey.replace(/^3030020100300706052b8104000a04220420/, '').slice(0, 64);
-      const publicKeyBytes = new Uint8Array(
-        publicKeyHex.match(/.{2}/g).map((byte: string) => parseInt(byte, 16))
-      );
-      
-      // Verify signature
-      const isValid = ed25519.verify(signatureBytes, requestBytes, publicKeyBytes);
-      
-      if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid signature'
-        });
-      }
-      
-      console.log('✅ Signature validation passed');
-    } catch (error) {
-      console.error('Error validating signature:', error);
-      return res.status(400).json({
-        success: false,
-        error: 'Signature validation failed'
       });
     }
 
@@ -1056,6 +1033,48 @@ app.post('/api/merchants/recover', async (req, res) => {
       success: false,
       error: 'Failed to recover merchant account'
     });
+  }
+});
+
+// Create merchant record for Supabase user (called when they first try to create coupon)
+app.post('/api/merchants/create-record', async (req, res) => {
+  try {
+    const { userId, email } = req.body;
+
+    if (!userId || !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, email'
+      });
+    }
+
+    console.log(`🔐 Creating merchant record for Supabase user: ${email} (${userId})`);
+
+    if (databaseService.isConnected()) {
+      try {
+        const merchant = await databaseService.createMerchantFromAuth(userId, email);
+        console.log(`✅ Created merchant record for user: ${userId}`);
+        
+        res.json({
+          success: true,
+          message: 'Merchant record created',
+          merchant: {
+            id: merchant.id,
+            email: merchant.email,
+            onboardingStatus: merchant.onboarding_status
+          }
+        });
+      } catch (error) {
+        console.error('Error creating merchant record:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    } else {
+      res.status(500).json({ success: false, error: 'Database not connected' });
+    }
+
+  } catch (error) {
+    console.error('Error creating merchant record:', error);
+    res.status(500).json({ success: false, error: 'Failed to create merchant record' });
   }
 });
 

@@ -57,8 +57,20 @@ export class MerchantService {
     error?: string;
   }> {
     try {
+      // Check if email already exists
+      if (databaseService.isConnected()) {
+        const existingMerchant = await databaseService.getMerchantByEmail(registration.email);
+        if (existingMerchant) {
+          return {
+            success: false,
+            error: `A merchant account already exists with email ${registration.email}. Please use a different email or contact support if this is your account.`
+          };
+        }
+      }
+
       const merchantId = `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      const tempAccountId = `tmp_${Date.now()}`;
       const merchantData: MerchantData = {
         id: merchantId,
         name: registration.name,
@@ -66,12 +78,28 @@ export class MerchantService {
         businessType: registration.businessType,
         fiatPaymentStatus: 'paid', // Assuming payment completed before registration
         onboardingStatus: 'pending',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        hederaAccountId: tempAccountId // Store temp ID so we can update it later
       };
 
-      this.merchantStorage.set(merchantId, merchantData);
-      
-      console.log(`✅ Registered new merchant: ${registration.name} (${merchantId})`);
+      // Store merchant in database instead of memory
+      if (databaseService.isConnected()) {
+        await databaseService.createMerchant({
+          hedera_account_id: tempAccountId, // Short temporary unique ID until real account is created
+          id: merchantId,
+          name: registration.name,
+          email: registration.email,
+          business_type: registration.businessType,
+          hedera_public_key: '', // Will be set when key is provided
+          fiat_payment_status: 'paid',
+          onboarding_status: 'pending'
+        });
+        console.log(`✅ Registered new merchant in database: ${registration.name} (${merchantId})`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchantData);
+        console.log(`✅ Registered new merchant in memory: ${registration.name} (${merchantId})`);
+      }
       
       return {
         success: true,
@@ -95,7 +123,8 @@ export class MerchantService {
     error?: string;
   }> {
     try {
-      const merchant = this.merchantStorage.get(merchantId);
+      // Get merchant from database instead of memory
+      const merchant = await this.getMerchantAsync(merchantId);
       if (!merchant) {
         throw new Error('Merchant not found');
       }
@@ -119,11 +148,26 @@ export class MerchantService {
       }
 
       // Update merchant data (NO private key stored - it stays on device!)
-      merchant.hederaAccountId = accountCreateReceipt.accountId.toString();
+      const newAccountId = accountCreateReceipt.accountId.toString();
+      const oldTempId = merchant.hederaAccountId!; // Save the old temp ID before updating (must exist)
+      
+      merchant.hederaAccountId = newAccountId;
       merchant.hederaPublicKey = publicKeyHex; // Store public key for verification
       merchant.onboardingStatus = 'account_created';
       
-      this.merchantStorage.set(merchantId, merchant);
+      // Update in database instead of memory
+      if (databaseService.isConnected()) {
+        // Update using the old temporary ID to find the record
+        await databaseService.updateMerchant(oldTempId, {
+          hedera_account_id: newAccountId,
+          hedera_public_key: publicKeyHex,
+          onboarding_status: 'account_created'
+        });
+        console.log(`✅ Updated merchant in database: ${oldTempId} → ${newAccountId}`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchant);
+      }
 
       console.log(`✅ Created Hedera account for merchant ${merchant.name}: ${merchant.hederaAccountId}`);
       console.log(`🔐 Private key remains secure on merchant's device`);
@@ -152,7 +196,7 @@ export class MerchantService {
     error?: string;
   }> {
     try {
-      const merchant = this.merchantStorage.get(merchantId);
+      const merchant = await this.getMerchantAsync(merchantId);
       if (!merchant) {
         throw new Error('Merchant not found');
       }
@@ -183,7 +227,17 @@ export class MerchantService {
       // Store private key in merchant data for demo (NEVER do this in production!)
       (merchant as any).privateKey = merchantPrivateKey.toStringDer();
       
-      this.merchantStorage.set(merchantId, merchant);
+      // Update in database instead of memory
+      if (databaseService.isConnected()) {
+        await databaseService.updateMerchant(merchant.hederaAccountId!, {
+          hedera_public_key: merchant.hederaPublicKey!,
+          onboarding_status: 'account_created'
+        });
+        console.log(`✅ Updated legacy merchant account in database: ${merchant.hederaAccountId}`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchant);
+      }
 
       console.log(`✅ Created Hedera account for merchant ${merchant.name}: ${merchant.hederaAccountId}`);
       console.log(`🔐 Merchant private key stored for demo co-signing`);
@@ -212,7 +266,7 @@ export class MerchantService {
     error?: string;
   }> {
     try {
-      const merchant = this.merchantStorage.get(merchantId);
+      const merchant = await this.getMerchantAsync(merchantId);
       if (!merchant || !merchant.hederaAccountId) {
         throw new Error('Merchant account not found or not created');
       }
@@ -240,9 +294,26 @@ export class MerchantService {
 
       // Update merchant data
       merchant.nftCollectionId = tokenCreateReceipt.tokenId.toString();
-      merchant.onboardingStatus = 'collection_created';
+      // Only update status if not already active (preserve active status)
+      if (merchant.onboardingStatus !== 'active') {
+        merchant.onboardingStatus = 'collection_created';
+      }
       
-      this.merchantStorage.set(merchantId, merchant);
+      // Update in database instead of memory
+      if (databaseService.isConnected()) {
+        const updateData: any = {
+          nft_collection_id: merchant.nftCollectionId
+        };
+        // Only update status if not already active
+        if (merchant.onboardingStatus !== 'active') {
+          updateData.onboarding_status = 'collection_created';
+        }
+        await databaseService.updateMerchant(merchant.hederaAccountId!, updateData);
+        console.log(`✅ Updated merchant collection ID in database: ${merchant.hederaAccountId}`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchant);
+      }
 
       console.log(`✅ Created NFT collection for ${merchant.name}: ${merchant.nftCollectionId}`);
       console.log(`🏦 Using operator as treasury for simplified demo flow`);
@@ -269,7 +340,7 @@ export class MerchantService {
     error?: string;
   }> {
     try {
-      const merchant = this.merchantStorage.get(merchantId);
+      const merchant = await this.getMerchantAsync(merchantId);
       if (!merchant || !merchant.hederaAccountId) {
         throw new Error('Merchant account not found or not created');
       }
@@ -312,7 +383,17 @@ export class MerchantService {
       merchant.nftCollectionId = tokenCreateReceipt.tokenId.toString();
       merchant.onboardingStatus = 'collection_created';
       
-      this.merchantStorage.set(merchantId, merchant);
+      // Update in database instead of memory
+      if (databaseService.isConnected()) {
+        await databaseService.updateMerchant(merchant.hederaAccountId!, {
+          nft_collection_id: merchant.nftCollectionId,
+          onboarding_status: 'collection_created'
+        });
+        console.log(`✅ Updated merchant collection ID in database: ${merchant.hederaAccountId}`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchant);
+      }
 
       console.log(`✅ Created NFT collection for ${merchant.name}: ${merchant.nftCollectionId}`);
       console.log(`🔐 Transaction co-signed by merchant account: ${merchant.hederaAccountId}`);
@@ -338,7 +419,7 @@ export class MerchantService {
     error?: string;
   }> {
     try {
-      const merchant = this.merchantStorage.get(merchantId);
+      const merchant = await this.getMerchantAsync(merchantId);
       if (!merchant) {
         throw new Error('Merchant not found');
       }
@@ -354,7 +435,17 @@ export class MerchantService {
       merchant.onboardingStatus = 'active';
       merchant.activatedAt = new Date().toISOString();
       
-      this.merchantStorage.set(merchantId, merchant);
+      // Update in database instead of memory
+      if (databaseService.isConnected() && merchant.id) {
+        await databaseService.updateMerchant(merchant.id, {
+          onboarding_status: 'active',
+          activated_at: merchant.activatedAt
+        });
+        console.log(`✅ Updated merchant activation status in database: ${merchant.id}`);
+      } else {
+        // Fallback to memory storage
+        this.merchantStorage.set(merchantId, merchant);
+      }
 
       console.log(`✅ Activated merchant: ${merchant.name}`);
       
@@ -369,9 +460,40 @@ export class MerchantService {
   }
 
   /**
-   * Get merchant data
+   * Get merchant data (legacy sync method - checks memory only)
    */
   getMerchant(merchantId: string): MerchantData | undefined {
+    return this.merchantStorage.get(merchantId);
+  }
+
+  /**
+   * Get merchant by ID (async - checks database first, then memory)
+   */
+  async getMerchantAsync(merchantId: string): Promise<MerchantData | undefined> {
+    if (databaseService.isConnected()) {
+      try {
+        const dbMerchant = await databaseService.getMerchantById(merchantId);
+        if (dbMerchant) {
+                  // Convert database format to internal format
+        return {
+          id: dbMerchant.id,
+          name: dbMerchant.name || '',
+          email: dbMerchant.email,
+          businessType: dbMerchant.business_type || '',
+          hederaAccountId: dbMerchant.hedera_account_id,
+          hederaPublicKey: dbMerchant.hedera_public_key,
+          nftCollectionId: dbMerchant.nft_collection_id,
+          fiatPaymentStatus: dbMerchant.fiat_payment_status as any,
+          onboardingStatus: dbMerchant.onboarding_status as any,
+          createdAt: dbMerchant.created_at
+        };
+        }
+      } catch (error) {
+        console.error('Error getting merchant from database:', error);
+      }
+    }
+    
+    // Fallback to memory storage
     return this.merchantStorage.get(merchantId);
   }
 

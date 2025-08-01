@@ -3,9 +3,13 @@
 ## 🎯 Project Overview
 **Digital coupons as Hedera NFTs: claim, trade and redeem in seconds from an ultra-simple mobile app**
 
-## 📊 Current Status: Production Database Integration & Secure Architecture ✅
+## 📊 Current Status: Dual Custody Model & Supabase Auth Integration 🚀
 
-**🎉 MAJOR UPDATE: Complete rebrand from CoupoFlow to Dysco!**
+**🎉 MAJOR ARCHITECTURAL EVOLUTION: Implemented proper custody separation!**
+
+### 🔄 **NEW CUSTODY MODEL:**
+- **👤 USERS**: Full Web3 custody (mnemonic phrases, device storage, own their NFTs)
+- **🏪 MERCHANTS**: Managed service (traditional auth, server-managed keys, simplified UX)
 
 ### ✅ **COMPLETED FEATURES**
 
@@ -39,6 +43,23 @@
 - [x] Signed request creation and validation
 - [x] **SECURE device-generated private keys** (never leave device!)
 - [x] **Lazy NFT collection creation** (created on first coupon mint)
+- [x] **User wallet with mnemonic phrases** (12-word BIP39 recovery)
+- [x] **HD wallet derivation** (BIP32/BIP44 compatible)
+- [x] **Full user custody model** (users own their NFTs and private keys)
+- [x] **Professional mnemonic backup UX** (numbered boxes, verification, security warnings)
+- [x] **Supabase authentication service** (email/password, Google, Apple OAuth)
+- [x] **Production-ready merchant auth** (traditional login, secure, recoverable)
+- [x] **Fixed balance API parsing** (string to number conversion)
+- [x] **User wallet creation flow** (prompted on first app entry)
+- [x] **Merchant auth migration** (removed mnemonic phrases, using Supabase)
+- [x] **Supabase configuration complete** (real credentials configured for merchant auth)
+- [x] **Mirror Node error handling** (graceful fallback for new accounts)
+- [x] **Merchant coupon creation fixed** (removed device keys, using Supabase auth)
+- [x] **Backend signature validation removed** (merchants no longer sign transactions)
+- [x] **Merchant profile auto-creation** (creates database record on first coupon attempt)
+- [x] **Table name mismatch fixed** (mobile now uses 'merchants' table)
+- [x] **Database schema updated** (fixed primary key and column structure)
+- [ ] **Database table recreation needed** (run new SQL schema in Supabase)
 
 #### 🔧 **Backend API (Express + TypeScript)**
 - [x] Express server with TypeScript

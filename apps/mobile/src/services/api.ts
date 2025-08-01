@@ -101,7 +101,7 @@ export const createHederaAccount = async (publicKey: string) => {
   }
 };
 
-export const getAccountBalance = async (accountId: string) => {
+export const getAccountBalance = async (accountId: string): Promise<{ success: boolean; balance: number; error?: string }> => {
   try {
     if (!accountId) {
       throw new Error('Account ID is required but was undefined or empty');
@@ -110,9 +110,25 @@ export const getAccountBalance = async (accountId: string) => {
     console.log('Fetching balance for account ID:', accountId);
     const response = await fetch(`${API_BASE_URL}/api/wallet/balance/${accountId}`);
     const data = await response.json();
-    return data;
+    
+    if (data.success) {
+      return {
+        success: true,
+        balance: parseFloat(data.balance) || 0
+      };
+    } else {
+      return {
+        success: false,
+        balance: 0,
+        error: data.error || 'Failed to get balance'
+      };
+    }
   } catch (error) {
     console.error('Error getting account balance:', error);
-    throw new Error('Failed to get account balance');
+    return {
+      success: false,
+      balance: 0,
+      error: 'Failed to get account balance'
+    };
   }
 }; 
