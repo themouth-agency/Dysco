@@ -15,13 +15,35 @@ export interface MerchantRecord {
   activated_at?: string;
 }
 
+export interface CampaignRecord {
+  id: string;
+  merchant_id: string;
+  name: string;
+  description?: string;
+  campaign_type: 'qr_redeem' | 'discount_code';
+  discount_type: 'percentage' | 'fixed_amount' | 'free_item';
+  discount_value: number;
+  start_date: string;
+  end_date: string;
+  image_url?: string;
+  max_redemptions_per_user: number;
+  total_limit?: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface NFTCouponRecord {
   nft_id: string;
   token_id: string;
   serial_number: number;
+  campaign_id: string;
   merchant_account_id: string;
+  owner_account_id?: string;
+  redemption_status: 'active' | 'redeemed' | 'expired' | 'burned';
+  discount_code?: string;
   metadata: any; // JSONB field for HIP-412 metadata
   created_at: string;
+  redeemed_at?: string;
 }
 
 class DatabaseService {
@@ -240,24 +262,6 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
 
   // === NFT COUPON OPERATIONS ===
 
-  async createNFTCoupon(coupon: Omit<NFTCouponRecord, 'created_at'>): Promise<NFTCouponRecord> {
-    if (!this.supabase) {
-      throw new Error('Database not connected');
-    }
-
-    const { data, error } = await this.supabase
-      .from('nft_coupons')
-      .insert([coupon])
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to create NFT coupon: ${error.message}`);
-    }
-
-    return data;
-  }
-
   async getNFTCoupon(nftId: string): Promise<NFTCouponRecord | null> {
     if (!this.supabase) {
       throw new Error('Database not connected');
@@ -466,14 +470,314 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
       throw new Error('Database not connected');
     }
 
-    const { data, error } = await this.supabase
+    // First, get basic redemption records
+    const { data: redemptions, error: redemptionError } = await this.supabase
       .from('coupon_redemptions')
       .select('*')
       .eq('merchant_account_id', merchantAccountId)
       .order('redeemed_at', { ascending: false });
 
+    if (redemptionError) {
+      throw new Error(`Failed to get redemption history: ${redemptionError.message}`);
+    }
+
+    if (!redemptions || redemptions.length === 0) {
+      return [];
+    }
+
+    // Get campaign info for each redemption
+    const enrichedRedemptions = [];
+    for (const redemption of redemptions) {
+      try {
+        // Get NFT coupon info
+        const { data: nftCoupon } = await this.supabase
+          .from('nft_coupons')
+          .select('campaign_id')
+          .eq('nft_id', redemption.nft_id)
+          .single();
+
+        if (nftCoupon?.campaign_id) {
+          // Get campaign info
+          const { data: campaign } = await this.supabase
+            .from('campaigns')
+            .select('name, description, discount_type, discount_value')
+            .eq('id', nftCoupon.campaign_id)
+            .single();
+
+          enrichedRedemptions.push({
+            ...redemption,
+            nft_coupons: {
+              campaign_id: nftCoupon.campaign_id,
+              campaigns: campaign || { name: 'Unknown Campaign', description: '', discount_type: '', discount_value: 0 }
+            }
+          });
+        } else {
+          enrichedRedemptions.push(redemption);
+        }
+      } catch (error) {
+        console.error(`Error enriching redemption ${redemption.id}:`, error);
+        enrichedRedemptions.push(redemption);
+      }
+    }
+
+    return enrichedRedemptions;
+  }
+
+  /**
+   * Get redemption history for a user
+   */
+  async getUserRedemptionHistory(userAccountId: string): Promise<any[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    // First, get basic redemption records
+    const { data: redemptions, error: redemptionError } = await this.supabase
+      .from('coupon_redemptions')
+      .select('*')
+      .eq('user_account_id', userAccountId)
+      .order('redeemed_at', { ascending: false });
+
+    if (redemptionError) {
+      throw new Error(`Failed to get user redemption history: ${redemptionError.message}`);
+    }
+
+    if (!redemptions || redemptions.length === 0) {
+      return [];
+    }
+
+    // Get detailed info for each redemption
+    const enrichedRedemptions = [];
+    for (const redemption of redemptions) {
+      try {
+        // Get NFT coupon info
+        const { data: nftCoupon } = await this.supabase
+          .from('nft_coupons')
+          .select('campaign_id, merchant_account_id')
+          .eq('nft_id', redemption.nft_id)
+          .single();
+
+        if (nftCoupon?.campaign_id) {
+          // Get campaign info
+          const { data: campaign } = await this.supabase
+            .from('campaigns')
+            .select('name, description, discount_type, discount_value')
+            .eq('id', nftCoupon.campaign_id)
+            .single();
+
+          // Get merchant info
+          const { data: merchant } = await this.supabase
+            .from('merchants')
+            .select('name')
+            .eq('hedera_account_id', nftCoupon.merchant_account_id)
+            .single();
+
+          enrichedRedemptions.push({
+            ...redemption,
+            nft_coupons: {
+              campaign_id: nftCoupon.campaign_id,
+              merchant_account_id: nftCoupon.merchant_account_id,
+              campaigns: campaign || { name: 'Unknown Campaign', description: '', discount_type: '', discount_value: 0 },
+              merchants: merchant || { name: 'Unknown Merchant' }
+            }
+          });
+        } else {
+          enrichedRedemptions.push(redemption);
+        }
+      } catch (error) {
+        console.error(`Error enriching user redemption ${redemption.id}:`, error);
+        enrichedRedemptions.push(redemption);
+      }
+    }
+
+    return enrichedRedemptions;
+  }
+
+  // ==========================================
+  // CAMPAIGN MANAGEMENT METHODS
+  // ==========================================
+
+  /**
+   * Create a new campaign
+   */
+  async createCampaign(campaign: Omit<CampaignRecord, 'created_at'>): Promise<CampaignRecord> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('campaigns')
+      .insert({
+        ...campaign,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
     if (error) {
-      throw new Error(`Failed to get redemption history: ${error.message}`);
+      throw new Error(`Failed to create campaign: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Get campaigns for a merchant
+   */
+  async getMerchantCampaigns(merchantId: string): Promise<CampaignRecord[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('campaigns')
+      .select('*')
+      .eq('merchant_id', merchantId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to get merchant campaigns: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get a single campaign by ID
+   */
+  async getCampaign(campaignId: string): Promise<CampaignRecord | null> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') { // Not found
+        return null;
+      }
+      throw new Error(`Failed to get campaign: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Update a campaign
+   */
+  async updateCampaign(campaignId: string, updates: Partial<CampaignRecord>): Promise<CampaignRecord> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('campaigns')
+      .update(updates)
+      .eq('id', campaignId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update campaign: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Get coupons for a specific campaign
+   */
+  async getCampaignCoupons(campaignId: string): Promise<NFTCouponRecord[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('nft_coupons')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to get campaign coupons: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Create an NFT coupon record
+   */
+  async createNFTCoupon(coupon: Omit<NFTCouponRecord, 'created_at'>): Promise<NFTCouponRecord> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('nft_coupons')
+      .insert({
+        ...coupon,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create NFT coupon: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Update NFT coupon status (for redemption, expiry, etc.)
+   */
+  async updateNFTCoupon(nftId: string, updates: Partial<NFTCouponRecord>): Promise<NFTCouponRecord> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('nft_coupons')
+      .update(updates)
+      .eq('nft_id', nftId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update NFT coupon: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Get expired coupons for a campaign (for bulk burning)
+   */
+  async getExpiredCoupons(campaignId: string): Promise<NFTCouponRecord[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    // Get campaign to check end_date
+    const campaign = await this.getCampaign(campaignId);
+    if (!campaign) {
+      throw new Error('Campaign not found');
+    }
+
+    const { data, error } = await this.supabase
+      .from('nft_coupons')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .eq('redemption_status', 'active')
+      .lt('created_at', campaign.end_date); // Assuming coupons expire with campaign
+
+    if (error) {
+      throw new Error(`Failed to get expired coupons: ${error.message}`);
     }
 
     return data || [];

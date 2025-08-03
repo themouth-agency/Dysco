@@ -272,15 +272,15 @@ export class MerchantService {
         throw new Error('Merchant account not found or not created');
       }
 
-      // For device-generated keys, we'll use operator as treasury to avoid co-signing complexity
-      // In production, you'd implement proper co-signing flow here
+      // Use merchant's Hedera account as treasury (operator signs for them)
+      const merchantAccountId = AccountId.fromString(merchant.hederaAccountId);
       const tokenCreateTx = new TokenCreateTransaction()
         .setTokenName(`${merchant.name} Coupons`)
         .setTokenSymbol(`${merchant.name.replace(/\s+/g, '').substring(0, 5).toUpperCase()}`)
         .setTokenType(TokenType.NonFungibleUnique)
         .setSupplyType(TokenSupplyType.Infinite)
         .setInitialSupply(0)
-        .setTreasuryAccountId(this.operatorAccountId) // Operator as treasury (simpler)
+        .setTreasuryAccountId(merchantAccountId) // Merchant as treasury
         .setAdminKey(this.operatorPrivateKey) // We maintain admin control
         .setSupplyKey(this.operatorPrivateKey) // We can mint for them
         .setWipeKey(this.operatorPrivateKey) // We can wipe if needed
@@ -317,7 +317,7 @@ export class MerchantService {
       }
 
       console.log(`✅ Created NFT collection for ${merchant.name}: ${merchant.nftCollectionId}`);
-      console.log(`🏦 Using operator as treasury for simplified demo flow`);
+      console.log(`🏦 Using merchant account ${merchant.hederaAccountId} as treasury`);
       
       return {
         success: true,
@@ -527,5 +527,388 @@ export class MerchantService {
   getMerchantByPublicKey(publicKey: string): MerchantData | undefined {
     return Array.from(this.merchantStorage.values())
       .find(merchant => merchant.hederaPublicKey === publicKey);
+  }
+
+  // ==========================================
+  // CAMPAIGN-BASED COUPON MINTING
+  // ==========================================
+
+  /**
+   * Mint a coupon for a specific campaign
+   */
+  async mintCouponForCampaign(
+    merchantId: string, 
+    campaign: any, 
+    collectionId: string,
+    merchantHederaAccountId: string
+  ): Promise<{ success: boolean; nftId?: string; error?: string }> {
+    try {
+      const { TokenMintTransaction } = await import('@hashgraph/sdk');
+
+      // Get merchant information for metadata
+      const merchant = await databaseService.getMerchantById(merchantId);
+      const merchantName = merchant?.name || 'Unknown Merchant';
+
+      // Generate unique discount code for discount_code campaigns
+      let discountCode;
+      if (campaign.campaign_type === 'discount_code') {
+        discountCode = `${campaign.discount_type.toUpperCase()}_${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+      }
+
+      // Create HIP-412 compliant metadata with campaign info
+      const metadata = {
+        name: `${campaign.name}`,
+        description: campaign.description || `${campaign.discount_value}${campaign.discount_type === 'percentage' ? '%' : ''} off from ${campaign.name}`,
+        image: campaign.image_url || '',
+        type: "object",
+        attributes: [
+          {
+            trait_type: "Campaign ID",
+            value: campaign.id
+          },
+          {
+            trait_type: "Campaign Name",
+            value: campaign.name
+          },
+          {
+            trait_type: "Discount Type",
+            value: campaign.discount_type
+          },
+          {
+            trait_type: "Discount Value",
+            value: campaign.discount_value.toString()
+          },
+          {
+            trait_type: "Redemption Type",
+            value: campaign.campaign_type
+          },
+          {
+            trait_type: "Expires",
+            value: campaign.end_date
+          },
+          {
+            trait_type: "Max Redemptions Per User",
+            value: campaign.max_redemptions_per_user.toString()
+          },
+          {
+            trait_type: "Merchant",
+            value: merchantName
+          }
+        ],
+        // Add properties object for easier parsing
+        properties: {
+          merchant: merchantName,
+          discountType: campaign.discount_type,
+          discountValue: campaign.discount_value,
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          expiresAt: campaign.end_date,
+          validUntil: campaign.end_date,
+          redemptionType: campaign.campaign_type,
+          maxRedemptionsPerUser: campaign.max_redemptions_per_user,
+          merchantAccountId: merchantHederaAccountId
+        } as any
+      };
+
+      // Add discount code to metadata if applicable
+      if (discountCode) {
+        metadata.attributes.push({
+          trait_type: "Discount Code",
+          value: discountCode
+        });
+        metadata.properties.discountCode = discountCode;
+      }
+
+      // Generate unique metadata ID before minting
+      const metadataId = `${campaign.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // For HIP-412 compliance: create metadata URL (will be saved after successful mint)
+      const metadataUrl = `http://192.168.0.49:3001/metadata/${metadataId}.json`;
+      
+      // Mint NFT on Hedera with just the metadata URL
+      const mintTransaction = new TokenMintTransaction()
+        .setTokenId(collectionId)
+        .setMetadata([Buffer.from(metadataUrl)])
+        .setMaxTransactionFee(new Hbar(10));
+
+      const mintResponse = await mintTransaction.execute(this.client);
+      const mintReceipt = await mintResponse.getReceipt(this.client);
+
+      if (!mintReceipt.serials || mintReceipt.serials.length === 0) {
+        throw new Error('Failed to get minted NFT serial number');
+      }
+
+      const serialNumber = mintReceipt.serials[0].toNumber();
+      const nftId = `${collectionId}:${serialNumber}`;
+
+      console.log(`✅ Minted campaign coupon NFT: ${nftId}`);
+
+      // Save metadata file for HIP-412 compliance
+      try {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        
+        const metadataDir = path.join(__dirname, '../../metadata');
+        await fs.mkdir(metadataDir, { recursive: true });
+        
+        const filename = `${metadataId}.json`;
+        const filepath = path.join(metadataDir, filename);
+        
+        await fs.writeFile(filepath, JSON.stringify(metadata, null, 2));
+        console.log(`📄 Saved metadata file: ${metadataUrl}`);
+      } catch (metadataError) {
+        console.error('⚠️ Failed to save metadata file:', metadataError);
+        // Don't fail the minting for metadata file issues
+      }
+
+      // Store in database if connected
+      if (databaseService.isConnected()) {
+        try {
+          await databaseService.createNFTCoupon({
+            nft_id: nftId,
+            token_id: collectionId,
+            serial_number: serialNumber,
+            campaign_id: campaign.id,
+            merchant_account_id: merchantHederaAccountId,
+            owner_account_id: undefined, // Initially owned by treasury (merchant)
+            redemption_status: 'active',
+            discount_code: discountCode,
+            metadata: metadata
+          });
+
+          console.log(`💾 Stored campaign coupon in database: ${nftId}`);
+        } catch (dbError) {
+          console.error('Failed to store coupon in database:', dbError);
+          // Don't fail the minting for database issues
+        }
+      }
+
+      return {
+        success: true,
+        nftId
+      };
+
+    } catch (error) {
+      console.error('Error minting campaign coupon:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Bulk mint multiple coupons for a campaign (more efficient)
+   */
+  async bulkMintCouponsForCampaign(
+    merchantId: string,
+    campaign: any,
+    collectionId: string,
+    merchantHederaAccountId: string,
+    quantity: number
+  ): Promise<{ success: boolean; mintedCoupons?: string[]; errors?: string[]; error?: string }> {
+    try {
+      console.log(`🎫 Bulk minting ${quantity} coupons for campaign: ${campaign.name}`);
+      
+      const mintedCoupons: string[] = [];
+      const errors: string[] = [];
+      const { TokenMintTransaction } = await import('@hashgraph/sdk');
+      
+      // Get merchant information for metadata
+      const merchant = await databaseService.getMerchantById(merchantId);
+      const merchantName = merchant?.name || 'Unknown Merchant';
+      
+      // Prepare all metadata in advance
+      const metadataEntries = [];
+      for (let i = 0; i < quantity; i++) {
+        let discountCode;
+        if (campaign.campaign_type === 'discount_code') {
+          discountCode = `${campaign.discount_type.toUpperCase()}_${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+        }
+
+        const metadataId = `${campaign.id}_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+        const metadataUrl = `http://192.168.0.49:3001/metadata/${metadataId}.json`;
+
+        const metadata = {
+          name: `${campaign.name}`,
+          description: campaign.description || `${campaign.discount_value}${campaign.discount_type === 'percentage' ? '%' : ''} off from ${campaign.name}`,
+          image: campaign.image_url || '',
+          type: "object",
+          attributes: [
+            {
+              trait_type: "Campaign ID",
+              value: campaign.id
+            },
+            {
+              trait_type: "Campaign Name",
+              value: campaign.name
+            },
+            {
+              trait_type: "Discount Type",
+              value: campaign.discount_type
+            },
+            {
+              trait_type: "Discount Value",
+              value: campaign.discount_value.toString()
+            },
+            {
+              trait_type: "Redemption Type",
+              value: campaign.campaign_type
+            },
+            {
+              trait_type: "Expires",
+              value: campaign.end_date
+            },
+            {
+              trait_type: "Max Redemptions Per User",
+              value: campaign.max_redemptions_per_user.toString()
+            },
+            {
+              trait_type: "Merchant",
+              value: merchantName
+            }
+          ],
+          // Add properties object for easier parsing
+          properties: {
+            merchant: merchantName,
+            discountType: campaign.discount_type,
+            discountValue: campaign.discount_value,
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            expiresAt: campaign.end_date,
+            validUntil: campaign.end_date,
+            redemptionType: campaign.campaign_type,
+            maxRedemptionsPerUser: campaign.max_redemptions_per_user,
+            merchantAccountId: merchantHederaAccountId
+          } as any
+        };
+
+        if (discountCode) {
+          metadata.attributes.push({
+            trait_type: "Discount Code",
+            value: discountCode
+          });
+          metadata.properties.discountCode = discountCode;
+        }
+
+        metadataEntries.push({
+          metadataId,
+          metadataUrl,
+          metadata,
+          discountCode
+        });
+      }
+
+      // Bulk mint all NFTs in one transaction
+      const metadataBuffers = metadataEntries.map(entry => Buffer.from(entry.metadataUrl));
+      
+      const mintTransaction = new TokenMintTransaction()
+        .setTokenId(collectionId)
+        .setMetadata(metadataBuffers)
+        .setMaxTransactionFee(new Hbar(20)); // Higher fee for bulk operation
+
+      const mintResponse = await mintTransaction.execute(this.client);
+      const mintReceipt = await mintResponse.getReceipt(this.client);
+
+      if (!mintReceipt.serials || mintReceipt.serials.length === 0) {
+        throw new Error('Failed to get minted NFT serial numbers');
+      }
+
+      console.log(`✅ Bulk minted ${mintReceipt.serials.length} campaign coupon NFTs`);
+
+      // Save metadata files and database records for each minted NFT
+      for (let i = 0; i < mintReceipt.serials.length; i++) {
+        try {
+          const serialNumber = mintReceipt.serials[i].toNumber();
+          const nftId = `${collectionId}:${serialNumber}`;
+          const entry = metadataEntries[i];
+
+          // Save metadata file
+          try {
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            
+            const metadataDir = path.join(__dirname, '../../metadata');
+            await fs.mkdir(metadataDir, { recursive: true });
+            
+            const filename = `${entry.metadataId}.json`;
+            const filepath = path.join(metadataDir, filename);
+            
+            await fs.writeFile(filepath, JSON.stringify(entry.metadata, null, 2));
+          } catch (metadataError) {
+            console.error(`⚠️ Failed to save metadata file for ${nftId}:`, metadataError);
+          }
+
+          // Store in database
+          if (databaseService.isConnected()) {
+            try {
+              await databaseService.createNFTCoupon({
+                nft_id: nftId,
+                token_id: collectionId,
+                serial_number: serialNumber,
+                campaign_id: campaign.id,
+                merchant_account_id: merchantHederaAccountId,
+                owner_account_id: undefined,
+                redemption_status: 'active',
+                discount_code: entry.discountCode,
+                metadata: entry.metadata
+              });
+            } catch (dbError) {
+              console.error(`Failed to store coupon ${nftId} in database:`, dbError);
+            }
+          }
+
+          mintedCoupons.push(nftId);
+          console.log(`📦 Processed coupon ${i + 1}/${quantity}: ${nftId}`);
+        } catch (itemError) {
+          const errorMsg = `Failed to process item ${i + 1}: ${itemError instanceof Error ? itemError.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          console.error(`❌ ${errorMsg}`);
+        }
+      }
+
+      return {
+        success: true,
+        mintedCoupons,
+        errors: errors.length > 0 ? errors : undefined
+      };
+
+    } catch (error) {
+      console.error('Error bulk minting campaign coupons:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Get campaign statistics for a merchant
+   */
+  async getCampaignStats(campaignId: string): Promise<{
+    totalMinted: number;
+    totalRedeemed: number;
+    totalExpired: number;
+    activeCoupons: number;
+  }> {
+    try {
+      if (!databaseService.isConnected()) {
+        return { totalMinted: 0, totalRedeemed: 0, totalExpired: 0, activeCoupons: 0 };
+      }
+
+      const coupons = await databaseService.getCampaignCoupons(campaignId);
+      
+      const stats = {
+        totalMinted: coupons.length,
+        totalRedeemed: coupons.filter(c => c.redemption_status === 'redeemed').length,
+        totalExpired: coupons.filter(c => c.redemption_status === 'expired').length,
+        activeCoupons: coupons.filter(c => c.redemption_status === 'active').length
+      };
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting campaign stats:', error);
+      return { totalMinted: 0, totalRedeemed: 0, totalExpired: 0, activeCoupons: 0 };
+    }
   }
 } 

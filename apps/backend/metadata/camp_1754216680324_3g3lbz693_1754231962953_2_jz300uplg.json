@@ -1,0 +1,40 @@
+{
+  "name": "Summer Sale 2024",
+  "description": "Get amazing discounts on all summer items",
+  "image": "https://example.com/summer-sale.jpg",
+  "type": "object",
+  "attributes": [
+    {
+      "trait_type": "Campaign ID",
+      "value": "camp_1754216680324_3g3lbz693"
+    },
+    {
+      "trait_type": "Campaign Name",
+      "value": "Summer Sale 2024"
+    },
+    {
+      "trait_type": "Discount Type",
+      "value": "fixed_amount"
+    },
+    {
+      "trait_type": "Discount Value",
+      "value": "5"
+    },
+    {
+      "trait_type": "Redemption Type",
+      "value": "discount_code"
+    },
+    {
+      "trait_type": "Expires",
+      "value": "2025-09-03T00:00:00"
+    },
+    {
+      "trait_type": "Max Redemptions Per User",
+      "value": "1"
+    },
+    {
+      "trait_type": "Discount Code",
+      "value": "FIXED_AMOUNT_9VM4RJN0"
+    }
+  ]
+}

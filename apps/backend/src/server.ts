@@ -3,6 +3,8 @@ dotenv.config(); // Load environment variables FIRST!
 
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs/promises';
 import { Client, TokenCreateTransaction, TokenType, TokenSupplyType, PrivateKey, PublicKey, AccountId, TokenMintTransaction, AccountCreateTransaction, Hbar } from '@hashgraph/sdk';
 import { MirrorNodeService } from './services/mirrorNode';
 import { NFTService, CouponData } from './services/nftService';
@@ -15,6 +17,28 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static metadata files for HIP-412 compliance
+app.use('/metadata', express.static(path.join(__dirname, '../metadata')));
+
+// Utility function to save metadata files
+async function saveMetadataFile(nftId: string, metadata: any): Promise<string> {
+  try {
+    const metadataDir = path.join(__dirname, '../metadata');
+    await fs.mkdir(metadataDir, { recursive: true });
+    
+    const filename = `${nftId}.json`;
+    const filepath = path.join(metadataDir, filename);
+    
+    await fs.writeFile(filepath, JSON.stringify(metadata, null, 2));
+    
+    // Return the public URL (adjust domain as needed)
+    return `http://192.168.0.49:3001/metadata/${filename}`;
+  } catch (error) {
+    console.error('❌ Failed to save metadata file:', error);
+    throw error;
+  }
+}
 
 // Initialize database
 async function initializeDatabase() {
@@ -107,6 +131,52 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
     }
   });
 
+  // Create Hedera account for user wallet
+  app.post('/api/users/create-account', async (req, res) => {
+    try {
+      const { publicKey } = req.body;
+
+      if (!publicKey) {
+        return res.status(400).json({
+          success: false,
+          error: 'Public key is required'
+        });
+      }
+
+      // Convert hex public key to proper format for Hedera
+      const publicKeyBytes = Buffer.from(publicKey, 'hex');
+      const hederaPublicKey = PublicKey.fromBytes(publicKeyBytes);
+      
+      console.log('🔐 Creating user Hedera account...');
+      
+      // Create account on Hedera - user pays their own fees via operator
+      const accountCreateTx = new AccountCreateTransaction()
+        .setKey(hederaPublicKey)
+        .setInitialBalance(new Hbar(1)) // Give 1 HBAR for initial operations
+        .setMaxAutomaticTokenAssociations(100); // Allow token associations for coupons
+
+      const accountCreateResponse = await accountCreateTx.execute(hederaClient);
+      const accountCreateReceipt = await accountCreateResponse.getReceipt(hederaClient);
+      const newAccountId = accountCreateReceipt.accountId;
+
+      console.log(`✅ Created user Hedera account: ${newAccountId?.toString()}`);
+
+      res.json({
+        success: true,
+        accountId: newAccountId?.toString(),
+        transactionId: accountCreateResponse.transactionId.toString()
+      });
+
+    } catch (error) {
+      console.error('Error creating user Hedera account:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create user Hedera account',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Get user's owned NFT coupons from Mirror Node
   app.get('/api/users/:accountId/coupons', async (req, res) => {
     try {
@@ -130,28 +200,45 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
       for (const nft of userNFTs) {
         const nftId = `${nft.token_id}:${nft.serial_number}`;
         
-        // Get metadata for this NFT
-        if (nftService) {
-          const metadata = nftService.getMetadata(nftId);
-          if (metadata) {
-            // Convert to Coupon format
-            const coupon = {
-              id: nftId,
-              name: metadata.name,
-              description: metadata.description,
-              merchant: metadata.properties.merchant,
-              value: metadata.properties.value,
-              category: metadata.properties.category,
-              validUntil: metadata.properties.validUntil,
-              imageUrl: metadata.image,
-              termsAndConditions: metadata.properties.termsAndConditions,
-              isAvailable: false, // User already owns this
-              tokenId: nft.token_id,
-              serialNumber: nft.serial_number,
-              status: 'owned'
-            };
-            couponNFTs.push(coupon);
+        try {
+          // Get metadata URL from the NFT (HIP-412 format)
+          const metadataUrl = Buffer.from(nft.metadata, 'base64').toString('utf-8');
+          
+          if (metadataUrl && metadataUrl.startsWith('http')) {
+            console.log(`🔍 Fetching metadata from: ${metadataUrl}`);
+            
+            // Fetch metadata from external URL
+            const metadataResponse = await fetch(metadataUrl);
+            if (metadataResponse.ok) {
+              const metadata = await metadataResponse.json() as any;
+              
+              // Convert to Coupon format
+              const coupon = {
+                id: nftId,
+                name: metadata.name || 'Unknown Coupon',
+                description: metadata.description || '',
+                merchant: metadata.properties?.merchant || 'Unknown',
+                value: metadata.properties?.discountValue || 0,
+                discountType: metadata.properties?.discountType || 'unknown',
+                category: metadata.properties?.category || 'general',
+                validUntil: metadata.properties?.expiresAt || metadata.properties?.validUntil,
+                imageUrl: metadata.image || '',
+                termsAndConditions: metadata.properties?.termsAndConditions || '',
+                isAvailable: false, // User already owns this
+                tokenId: nft.token_id,
+                serialNumber: nft.serial_number,
+                status: 'owned'
+              };
+              couponNFTs.push(coupon);
+              console.log(`✅ Added coupon: ${metadata.name || 'Unknown'}`);
+            } else {
+              console.log(`❌ Failed to fetch metadata from ${metadataUrl}`);
+            }
+          } else {
+            console.log(`⚠️ NFT ${nftId} has invalid metadata URL: ${metadataUrl}`);
           }
+        } catch (error) {
+          console.error(`❌ Error processing NFT ${nftId}:`, error);
         }
       }
 
@@ -283,31 +370,70 @@ app.post('/api/coupons/mint', async (req, res) => {
   }
 });
 
-// Get available coupons
-app.get('/api/coupons/available', (req, res) => {
-  // Mock data for now - will connect to database later
-  const mockCoupons = [
-    {
-      id: '1',
-      name: '20% Off Coffee',
-      description: 'Valid at Central Perk Coffee Shop',
-      discountPercent: 20,
-      merchantId: 'central-perk-001',
-      expiresAt: '2024-12-31T23:59:59Z',
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'Free Pizza Slice',
-      description: 'Buy one get one free at Pizza Palace',
-      discountPercent: 50,
-      merchantId: 'pizza-palace-002',
-      expiresAt: '2024-11-30T23:59:59Z',
-      status: 'active'
+// Get available campaigns for discovery (instead of individual coupons)
+app.get('/api/campaigns/discover', async (req, res) => {
+  try {
+    console.log('🔍 Fetching discoverable campaigns...');
+    
+    // Get all active campaigns from all merchants
+    const allMerchants = await databaseService.getAllMerchants();
+    const discoverableCampaigns = [];
+    
+    for (const merchant of allMerchants) {
+      try {
+        const campaigns = await databaseService.getMerchantCampaigns(merchant.hedera_account_id);
+        
+        for (const campaign of campaigns) {
+          // Only include active campaigns that haven't expired
+          const now = new Date();
+          const endDate = new Date(campaign.end_date);
+          
+          if (campaign.is_active && now <= endDate) {
+            // Count available coupons for this campaign
+            const campaignCoupons = await databaseService.getCampaignCoupons(campaign.id);
+            const availableCount = campaignCoupons.filter(coupon => 
+              coupon.redemption_status === 'active' && !coupon.owner_account_id
+            ).length;
+            
+            if (availableCount > 0) {
+              discoverableCampaigns.push({
+                id: campaign.id,
+                name: campaign.name,
+                description: campaign.description,
+                merchant: merchant.name || 'Unknown Merchant',
+                merchantId: merchant.hedera_account_id,
+                discountType: campaign.discount_type,
+                discountValue: campaign.discount_value,
+                imageUrl: campaign.image_url,
+                expiresAt: campaign.end_date,
+                availableCount: availableCount,
+                maxRedemptionsPerUser: campaign.max_redemptions_per_user,
+                totalLimit: campaign.total_limit,
+                status: 'active'
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching campaigns for merchant ${merchant.hedera_account_id}:`, error);
+      }
     }
-  ];
-
-  res.json({ coupons: mockCoupons });
+    
+    console.log(`✅ Found ${discoverableCampaigns.length} discoverable campaigns`);
+    
+    res.json({ 
+      success: true,
+      campaigns: discoverableCampaigns,
+      count: discoverableCampaigns.length
+    });
+    
+  } catch (error) {
+    console.error('Error fetching discoverable campaigns:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch discoverable campaigns'
+    });
+  }
 });
 
 // Claim coupon (transfer NFT to user)
@@ -423,6 +549,35 @@ app.post('/api/coupons/redeem', async (req, res) => {
 
     console.log(`🔥 Redeeming coupon NFT: ${nftId} from user: ${userAccountId}`);
 
+    // SECURITY CHECK: Verify user still owns this NFT before redemption
+    try {
+      const { MirrorNodeService } = await import('./services/mirrorNode');
+      const userNFTs = await MirrorNodeService.getAccountNFTs(userAccountId);
+      
+      // Check if this specific NFT is still owned by the user
+      const ownsNFT = userNFTs.some(nft => 
+        nft.token_id === tokenId && nft.serial_number === serialNumber
+      );
+
+      if (!ownsNFT) {
+        console.warn(`⚠️ User ${userAccountId} no longer owns NFT ${nftId}`);
+        return res.status(400).json({
+          success: false,
+          error: 'NFT ownership verification failed - coupon may have been transferred',
+          code: 'NFT_NOT_OWNED'
+        });
+      }
+
+      console.log(`✅ Verified user ${userAccountId} still owns NFT ${nftId}`);
+    } catch (verificationError) {
+      console.error('Error verifying NFT ownership:', verificationError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to verify NFT ownership',
+        code: 'OWNERSHIP_VERIFICATION_FAILED'
+      });
+    }
+
     // Import TokenWipeTransaction for burning NFTs
     const { TokenWipeTransaction } = await import('@hashgraph/sdk');
 
@@ -441,16 +596,30 @@ app.post('/api/coupons/redeem', async (req, res) => {
     // Store redemption record in database if connected
     if (databaseService.isConnected()) {
       try {
-        // Store redemption record
-        await databaseService.recordRedemption({
-          nftId,
-          userAccountId,
-          merchantAccountId: tokenId, // Use token ID to find merchant
-          redemptionTransactionId: wipeResponse.transactionId.toString(),
-          scannedAt: scannedAt || new Date().toISOString(),
-          redemptionMethod: merchantScan ? 'qr_scan' : 'direct'
-        });
-        console.log(`📝 Stored redemption record for ${nftId}`);
+        // Get coupon details to find the actual merchant ID
+        const couponRecord = await databaseService.getNFTCoupon(nftId);
+        if (couponRecord) {
+          // Get merchant record using the merchant account ID from the coupon
+          const merchants = await databaseService.getAllMerchants();
+          const merchant = merchants.find(m => m.hedera_account_id === couponRecord.merchant_account_id);
+          
+          if (merchant) {
+            // Store redemption record
+            await databaseService.recordRedemption({
+              nftId,
+              userAccountId,
+              merchantAccountId: merchant.id, // Use the merchant's Supabase UUID
+              redemptionTransactionId: wipeResponse.transactionId.toString(),
+              scannedAt: scannedAt || new Date().toISOString(),
+              redemptionMethod: merchantScan ? 'qr_scan' : 'direct'
+            });
+            console.log(`📝 Stored redemption record for ${nftId}`);
+          } else {
+            console.warn(`⚠️ Could not find merchant for coupon ${nftId}`);
+          }
+        } else {
+          console.warn(`⚠️ Could not find coupon record for ${nftId}`);
+        }
       } catch (dbError) {
         console.error('Failed to store redemption record:', dbError);
         // Don't fail the transaction for DB errors
@@ -1258,14 +1427,14 @@ app.post('/api/merchants/recover', async (req, res) => {
 });
 
 // Get merchant redemption history
-app.get('/api/merchants/:merchantAccountId/redemptions', async (req, res) => {
+app.get('/api/merchants/:merchantId/redemptions', async (req, res) => {
   try {
-    const { merchantAccountId } = req.params;
+    const { merchantId } = req.params;
 
-    if (!merchantAccountId) {
+    if (!merchantId) {
       return res.status(400).json({
         success: false,
-        error: 'Merchant account ID is required'
+        error: 'Merchant ID is required'
       });
     }
 
@@ -1276,7 +1445,8 @@ app.get('/api/merchants/:merchantAccountId/redemptions', async (req, res) => {
       });
     }
 
-    const redemptions = await databaseService.getRedemptionHistory(merchantAccountId);
+    console.log(`📊 Fetching redemption history for merchant: ${merchantId}`);
+    const redemptions = await databaseService.getRedemptionHistory(merchantId);
 
     res.json({
       success: true,
@@ -1285,10 +1455,48 @@ app.get('/api/merchants/:merchantAccountId/redemptions', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting redemption history:', error);
+    console.error('Error getting merchant redemption history:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to get redemption history',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get user redemption history
+app.get('/api/users/:userAccountId/redemptions', async (req, res) => {
+  try {
+    const { userAccountId } = req.params;
+
+    if (!userAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User account ID is required'
+      });
+    }
+
+    if (!databaseService.isConnected()) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database not connected'
+      });
+    }
+
+    console.log(`📊 Fetching redemption history for user: ${userAccountId}`);
+    const redemptions = await databaseService.getUserRedemptionHistory(userAccountId);
+
+    res.json({
+      success: true,
+      redemptions,
+      count: redemptions.length
+    });
+
+  } catch (error) {
+    console.error('Error getting user redemption history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get user redemption history',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -1333,6 +1541,692 @@ app.post('/api/merchants/create-record', async (req, res) => {
   } catch (error) {
     console.error('Error creating merchant record:', error);
     res.status(500).json({ success: false, error: 'Failed to create merchant record' });
+  }
+});
+
+// ==========================================
+// CAMPAIGN MANAGEMENT ENDPOINTS
+// ==========================================
+
+/**
+ * Create a new campaign for a merchant
+ */
+app.post('/api/merchants/:merchantId/campaigns', async (req, res) => {
+  try {
+    const { merchantId } = req.params;
+    const { name, description, campaignType, discountType, discountValue, startDate, endDate, imageUrl, maxRedemptionsPerUser, totalLimit } = req.body;
+
+    // Validate required fields
+    if (!name || !campaignType || !discountType || !discountValue || !startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: name, campaignType, discountType, discountValue, startDate, endDate'
+      });
+    }
+
+    // Generate campaign ID
+    const campaignId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const campaign = await databaseService.createCampaign({
+      id: campaignId,
+      merchant_id: merchantId,
+      name,
+      description: description || '',
+      campaign_type: campaignType,
+      discount_type: discountType,
+      discount_value: parseFloat(discountValue),
+      start_date: startDate,
+      end_date: endDate,
+      image_url: imageUrl,
+      max_redemptions_per_user: maxRedemptionsPerUser || 1,
+      total_limit: totalLimit,
+      is_active: true
+    });
+
+    console.log(`✅ Created campaign: ${campaign.name} for merchant ${merchantId}`);
+
+    res.json({
+      success: true,
+      message: 'Campaign created successfully',
+      campaign
+    });
+
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create campaign'
+    });
+  }
+});
+
+/**
+ * Get all campaigns for a merchant
+ */
+app.get('/api/merchants/:merchantId/campaigns', async (req, res) => {
+  try {
+    const { merchantId } = req.params;
+    
+    const campaigns = await databaseService.getMerchantCampaigns(merchantId);
+    
+    console.log(`📋 Retrieved ${campaigns.length} campaigns for merchant ${merchantId}`);
+
+    res.json({
+      success: true,
+      campaigns
+    });
+
+  } catch (error) {
+    console.error('Error getting merchant campaigns:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get campaigns'
+    });
+  }
+});
+
+/**
+ * Get a specific campaign
+ */
+app.get('/api/campaigns/:campaignId', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    
+    const campaign = await databaseService.getCampaign(campaignId);
+    
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      campaign
+    });
+
+  } catch (error) {
+    console.error('Error getting campaign:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get campaign'
+    });
+  }
+});
+
+/**
+ * Get coupons for a specific campaign
+ */
+app.get('/api/campaigns/:campaignId/coupons', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    
+    const coupons = await databaseService.getCampaignCoupons(campaignId);
+    
+    console.log(`🎫 Retrieved ${coupons.length} coupons for campaign ${campaignId}`);
+
+    res.json({
+      success: true,
+      coupons
+    });
+
+  } catch (error) {
+    console.error('Error getting campaign coupons:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get campaign coupons'
+    });
+  }
+});
+
+/**
+ * Mint multiple coupons for a campaign
+ */
+app.post('/api/campaigns/:campaignId/coupons/mint', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const { quantity = 1 } = req.body;
+
+    // Get campaign details
+    const campaign = await databaseService.getCampaign(campaignId);
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    // Get merchant details
+    const merchant = await databaseService.getMerchantById(campaign.merchant_id);
+    if (!merchant) {
+      return res.status(404).json({
+        success: false,
+        error: 'Merchant not found'
+      });
+    }
+
+    console.log(`🎫 Minting ${quantity} coupons for campaign: ${campaign.name}`);
+
+    if (!merchantService) {
+      return res.status(500).json({
+        success: false,
+        error: 'Merchant service not initialized'
+      });
+    }
+
+    // Use the new bulk minting method for efficiency and HIP-412 compliance
+    const bulkResult = await merchantService.bulkMintCouponsForCampaign(
+      merchant.id,
+      campaign,
+      merchant.nft_collection_id!,
+      merchant.hedera_account_id,
+      quantity
+    );
+
+    if (bulkResult.success) {
+      const successCount = bulkResult.mintedCoupons?.length || 0;
+      console.log(`✅ Successfully bulk minted ${successCount}/${quantity} coupons`);
+      
+      res.json({
+        success: true,
+        message: `Successfully minted ${successCount}/${quantity} coupons`,
+        mintedCoupons: bulkResult.mintedCoupons,
+        errors: bulkResult.errors,
+        campaign: campaign.name
+      });
+    } else {
+      console.error(`❌ Bulk minting failed:`, bulkResult.error);
+      res.status(500).json({
+        success: false,
+        error: bulkResult.error || 'Bulk minting failed'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error minting campaign coupons:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to mint coupons'
+    });
+  }
+});
+
+/**
+ * Burn expired coupons for a campaign
+ */
+app.post('/api/campaigns/:campaignId/burn-expired', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+
+    // Get expired coupons
+    const expiredCoupons = await databaseService.getExpiredCoupons(campaignId);
+    
+    console.log(`🔥 Found ${expiredCoupons.length} expired coupons for campaign ${campaignId}`);
+
+    const burnedCoupons = [];
+
+    for (const coupon of expiredCoupons) {
+      try {
+        // Burn NFT on Hedera using wipe transaction
+        const { TokenWipeTransaction } = await import('@hashgraph/sdk');
+        
+        const wipeTransaction = new TokenWipeTransaction()
+          .setTokenId(coupon.token_id)
+          .setAccountId(coupon.owner_account_id || hederaClient.operatorAccountId!)
+          .setSerials([coupon.serial_number])
+          .setMaxTransactionFee(new Hbar(10));
+
+        await wipeTransaction.execute(hederaClient);
+
+        // Update database status
+        await databaseService.updateNFTCoupon(coupon.nft_id, {
+          redemption_status: 'burned'
+        });
+
+        burnedCoupons.push(coupon.nft_id);
+        console.log(`🔥 Burned expired coupon: ${coupon.nft_id}`);
+
+      } catch (error) {
+        console.error(`❌ Failed to burn coupon ${coupon.nft_id}:`, error);
+        // Continue with next coupon
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully burned ${burnedCoupons.length}/${expiredCoupons.length} expired coupons`,
+      burnedCoupons
+    });
+
+  } catch (error) {
+    console.error('Error burning expired coupons:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to burn expired coupons'
+    });
+  }
+});
+
+/**
+ * Public claim endpoint - allows users to claim a coupon from a campaign
+ */
+app.post('/api/campaigns/:campaignId/claim', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const { userAccountId } = req.body;
+
+    if (!userAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User account ID is required'
+      });
+    }
+
+    // Get campaign details
+    const campaign = await databaseService.getCampaign(campaignId);
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    // Check if campaign is active and not expired
+    const now = new Date();
+    const endDate = new Date(campaign.end_date);
+    if (!campaign.is_active || now > endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campaign is not active or has expired'
+      });
+    }
+
+    // Check how many coupons this user has already claimed from this campaign
+    const allCampaignCoupons = await databaseService.getCampaignCoupons(campaignId);
+    const userClaimedCoupons = allCampaignCoupons.filter(coupon => 
+      coupon.owner_account_id === userAccountId
+    );
+    const userClaimedCount = userClaimedCoupons.length;
+
+    console.log(`📊 User ${userAccountId} has already claimed ${userClaimedCount}/${campaign.max_redemptions_per_user} coupons from campaign ${campaignId}`);
+    console.log(`📊 Campaign details:`, {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      maxRedemptions: campaign.max_redemptions_per_user,
+      totalCouponsInCampaign: allCampaignCoupons.length
+    });
+    console.log(`📊 User's claimed coupons:`, userClaimedCoupons.map(c => ({
+      nftId: c.nft_id,
+      tokenId: c.token_id,
+      serialNumber: c.serial_number,
+      claimedAt: c.created_at
+    })));
+
+    // Check if user has reached their limit
+    if (userClaimedCount >= campaign.max_redemptions_per_user) {
+      return res.status(400).json({
+        success: false,
+        error: `You have already claimed the maximum number of coupons (${campaign.max_redemptions_per_user}) from this campaign`
+      });
+    }
+
+    // Get available (unclaimed) coupons for this campaign
+    const unclaimedCoupons = allCampaignCoupons.filter(coupon => 
+      coupon.redemption_status === 'active' && !coupon.owner_account_id
+    );
+
+    if (unclaimedCoupons.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No coupons available for this campaign'
+      });
+    }
+
+    // Get the first available coupon
+    const couponToClaim = unclaimedCoupons[0];
+
+    console.log(`🎫 Claiming coupon ${couponToClaim.nft_id} for user ${userAccountId}`);
+
+    // Transfer NFT from merchant (treasury) to user
+    try {
+      const { TransferTransaction } = await import('@hashgraph/sdk');
+      
+      const transferTx = new TransferTransaction()
+        .addNftTransfer(
+          couponToClaim.token_id,
+          couponToClaim.serial_number,
+          couponToClaim.merchant_account_id,  // From merchant
+          userAccountId                       // To user
+        )
+        .setMaxTransactionFee(new Hbar(5));
+
+      const transferResponse = await transferTx.execute(hederaClient);
+      const transferReceipt = await transferResponse.getReceipt(hederaClient);
+
+      if (transferReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Transfer failed with status: ${transferReceipt.status.toString()}`);
+      }
+
+      // Update database - mark as claimed by user
+      await databaseService.updateNFTCoupon(couponToClaim.nft_id, {
+        owner_account_id: userAccountId,
+        redemption_status: 'active' // Still active, just now owned by user
+      });
+
+      console.log(`✅ Successfully claimed coupon ${couponToClaim.nft_id} for user ${userAccountId}`);
+
+      res.json({
+        success: true,
+        message: 'Coupon claimed successfully!',
+        coupon: {
+          nftId: couponToClaim.nft_id,
+          campaignName: campaign.name,
+          discountType: campaign.discount_type,
+          discountValue: campaign.discount_value,
+          expiresAt: campaign.end_date,
+          discountCode: couponToClaim.discount_code
+        }
+      });
+
+    } catch (transferError) {
+      console.error('❌ Failed to transfer coupon:', transferError);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to transfer coupon to user'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error claiming coupon:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to claim coupon'
+    });
+  }
+});
+
+/**
+ * Generate secure redemption token for an NFT coupon
+ */
+app.post('/api/coupons/generate-redemption-token', async (req, res) => {
+  try {
+    const { nftId, userAccountId } = req.body;
+
+    if (!nftId || !userAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'NFT ID and user account ID are required'
+      });
+    }
+
+    // Verify user owns this NFT by checking database
+    const couponRecord = await databaseService.getNFTCoupon(nftId);
+    if (!couponRecord || couponRecord.owner_account_id !== userAccountId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not own this NFT coupon'
+      });
+    }
+
+    if (couponRecord.redemption_status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'This coupon has already been redeemed'
+      });
+    }
+
+    // Generate secure redemption token (signed data)
+    const redemptionData = {
+      nftId,
+      userAccountId,
+      merchantAccountId: couponRecord.merchant_account_id,
+      tokenId: couponRecord.token_id,
+      serialNumber: couponRecord.serial_number,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minute expiry
+    };
+
+    // In production, you'd sign this with a private key
+    // For demo, we'll use a simple hash-based verification
+    const crypto = await import('crypto');
+    const dataString = JSON.stringify(redemptionData);
+    const signature = crypto.createHmac('sha256', process.env.JWT_SECRET || 'demo-secret')
+      .update(dataString)
+      .digest('hex');
+
+    const secureToken = {
+      data: redemptionData,
+      signature: signature
+    };
+
+    console.log(`🎫 Generated secure redemption token for NFT ${nftId}`);
+
+    res.json({
+      success: true,
+      redemptionToken: Buffer.from(JSON.stringify(secureToken)).toString('base64'),
+      expiresAt: redemptionData.expiresAt
+    });
+
+  } catch (error) {
+    console.error('Error generating redemption token:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate redemption token'
+    });
+  }
+});
+
+/**
+ * User burns their own coupon (permanent destruction)
+ */
+app.post('/api/coupons/burn', async (req, res) => {
+  try {
+    const { nftId, userAccountId, userPrivateKey } = req.body;
+
+    if (!nftId || !userAccountId || !userPrivateKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'NFT ID, user account ID, and private key are required'
+      });
+    }
+
+    // Verify user owns this NFT by checking database
+    const couponRecord = await databaseService.getNFTCoupon(nftId);
+    if (!couponRecord || couponRecord.owner_account_id !== userAccountId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not own this NFT coupon'
+      });
+    }
+
+    if (couponRecord.redemption_status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'This coupon has already been redeemed or burned'
+      });
+    }
+
+    const { TokenWipeTransaction, PrivateKey } = await import('@hashgraph/sdk');
+
+    // User wipes their own NFT (permanent destruction from their account)
+    console.log(`🧹 User ${userAccountId} wiping coupon ${nftId}`);
+    
+    const wipeTransaction = new TokenWipeTransaction()
+      .setTokenId(couponRecord.token_id)
+      .setAccountId(userAccountId) // Account to wipe NFT from
+      .setSerials([couponRecord.serial_number])
+      .setMaxTransactionFee(new Hbar(2))
+      .freezeWith(hederaClient); // Freeze with operator client
+
+    // Execute with operator (who has wipe key and pays the fee)
+    const wipeResponse = await wipeTransaction.execute(hederaClient);
+    const wipeReceipt = await wipeResponse.getReceipt(hederaClient);
+
+    if (wipeReceipt.status.toString() !== 'SUCCESS') {
+      throw new Error(`Wipe failed with status: ${wipeReceipt.status.toString()}`);
+    }
+
+    // Update database - mark as burned
+    await databaseService.updateNFTCoupon(nftId, {
+      redemption_status: 'burned',
+      redeemed_at: new Date().toISOString()
+    });
+
+    console.log(`✅ Successfully wiped coupon ${nftId} from user ${userAccountId}`);
+
+    res.json({
+      success: true,
+      message: 'Coupon wiped successfully',
+      transactionId: wipeResponse.transactionId.toString()
+    });
+
+  } catch (error) {
+    console.error('Error burning coupon:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to burn coupon',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Verify and redeem a secure redemption token (for merchants)
+ */
+app.post('/api/coupons/verify-redemption-token', async (req, res) => {
+  try {
+    const { redemptionToken } = req.body;
+
+    if (!redemptionToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Redemption token is required'
+      });
+    }
+
+    // Decode and verify the token
+    let secureToken;
+    try {
+      secureToken = JSON.parse(Buffer.from(redemptionToken, 'base64').toString('utf-8'));
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid redemption token format'
+      });
+    }
+
+    // Verify signature
+    const crypto = await import('crypto');
+    const dataString = JSON.stringify(secureToken.data);
+    const expectedSignature = crypto.createHmac('sha256', process.env.JWT_SECRET || 'demo-secret')
+      .update(dataString)
+      .digest('hex');
+
+    if (secureToken.signature !== expectedSignature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid redemption token signature'
+      });
+    }
+
+    // Check expiry
+    const now = new Date();
+    const expiresAt = new Date(secureToken.data.expiresAt);
+    if (now > expiresAt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Redemption token has expired'
+      });
+    }
+
+    // Check if coupon still exists and is active
+    const couponRecord = await databaseService.getNFTCoupon(secureToken.data.nftId);
+    if (!couponRecord || couponRecord.redemption_status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'Coupon is no longer valid or has been redeemed'
+      });
+    }
+
+    // Fetch coupon details from database
+    const couponDetails = await databaseService.getNFTCoupon(secureToken.data.nftId);
+    if (!couponDetails) {
+      return res.status(404).json({
+        success: false,
+        error: 'Coupon not found in database'
+      });
+    }
+
+    // Fetch campaign details to get coupon name and discount info
+    const campaign = await databaseService.getCampaign(couponDetails.campaign_id);
+    
+    console.log(`✅ Verified redemption token for NFT ${secureToken.data.nftId}`);
+
+    res.json({
+      success: true,
+      message: 'Redemption token is valid',
+      couponData: {
+        nftId: secureToken.data.nftId,
+        userAccountId: secureToken.data.userAccountId,
+        merchantAccountId: secureToken.data.merchantAccountId,
+        tokenId: secureToken.data.tokenId,
+        serialNumber: secureToken.data.serialNumber,
+        issuedAt: secureToken.data.issuedAt,
+        // Add campaign details for display
+        name: campaign?.name || 'Unknown Coupon',
+        description: campaign?.description || '',
+        discountType: campaign?.discount_type || '',
+        value: campaign?.discount_value || 0,
+        expiresAt: campaign?.end_date || null
+      }
+    });
+
+  } catch (error) {
+    console.error('Error verifying redemption token:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify redemption token'
+    });
+  }
+});
+
+/**
+ * Get shareable link for a campaign
+ */
+app.get('/api/campaigns/:campaignId/share-link', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+
+    const campaign = await databaseService.getCampaign(campaignId);
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    // Generate shareable link (you can customize the domain)
+    const shareLink = `exp://192.168.0.49:8081/--/claim/${campaignId}`;
+    const webLink = `https://dysco.app/claim/${campaignId}`; // For future web version
+
+    res.json({
+      success: true,
+      shareLink,
+      webLink,
+      campaign: {
+        name: campaign.name,
+        description: campaign.description,
+        expiresAt: campaign.end_date
+      }
+    });
+
+  } catch (error) {
+    console.error('Error generating share link:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate share link'
+    });
   }
 });
 

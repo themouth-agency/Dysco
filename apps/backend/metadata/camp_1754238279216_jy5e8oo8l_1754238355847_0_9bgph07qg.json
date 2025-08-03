@@ -1,0 +1,36 @@
+{
+  "name": "Test",
+  "description": "Get amazing discounts on all summer items",
+  "image": "https://placehold.co/600x400",
+  "type": "object",
+  "attributes": [
+    {
+      "trait_type": "Campaign ID",
+      "value": "camp_1754238279216_jy5e8oo8l"
+    },
+    {
+      "trait_type": "Campaign Name",
+      "value": "Test"
+    },
+    {
+      "trait_type": "Discount Type",
+      "value": "fixed_amount"
+    },
+    {
+      "trait_type": "Discount Value",
+      "value": "1"
+    },
+    {
+      "trait_type": "Redemption Type",
+      "value": "qr_redeem"
+    },
+    {
+      "trait_type": "Expires",
+      "value": "2025-09-03T00:00:00"
+    },
+    {
+      "trait_type": "Max Redemptions Per User",
+      "value": "5"
+    }
+  ]
+}
