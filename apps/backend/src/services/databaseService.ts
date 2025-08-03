@@ -2,18 +2,16 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Database interfaces
 export interface MerchantRecord {
-  id: string; // Supabase user ID (primary key)
+  hedera_account_id: string; // Primary key in database
+  id: string; // Supabase user ID
   email: string;
-  name?: string;
-  business_name?: string;
-  business_type?: string;
-  hedera_account_id?: string;
-  hedera_public_key?: string;
+  name: string;
+  business_type: string;
+  hedera_public_key: string;
   nft_collection_id?: string;
   fiat_payment_status: 'pending' | 'paid' | 'failed';
   onboarding_status: 'pending' | 'account_created' | 'collection_created' | 'active';
   created_at: string;
-  updated_at?: string;
   activated_at?: string;
 }
 
@@ -209,15 +207,9 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
       throw new Error('Database not connected');
     }
 
-    // Add updated_at timestamp
-    const updatesWithTimestamp = {
-      ...updates,
-      updated_at: new Date().toISOString()
-    };
-
     const { data, error } = await this.supabase
       .from('merchants')
-      .update(updatesWithTimestamp)
+      .update(updates)
       .eq('id', merchantId)
       .select()
       .single();
@@ -386,15 +378,13 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
         id: userId,
         email: email,
         name: null,
-        business_name: null,
         business_type: null,
         hedera_account_id: null,
         hedera_public_key: null,
         nft_collection_id: null,
         onboarding_status: 'pending',
         fiat_payment_status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: new Date().toISOString()
       })
       .select()
       .single();
@@ -404,6 +394,89 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
     }
 
     return data;
+  }
+
+  /**
+   * Record a coupon redemption
+   */
+  async recordRedemption(redemptionData: {
+    nftId: string;
+    userAccountId: string;
+    merchantAccountId: string;
+    redemptionTransactionId: string;
+    scannedAt: string;
+    redemptionMethod: string;
+  }): Promise<void> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { error } = await this.supabase
+      .from('coupon_redemptions')
+      .insert({
+        nft_id: redemptionData.nftId,
+        user_account_id: redemptionData.userAccountId,
+        merchant_account_id: redemptionData.merchantAccountId,
+        redemption_transaction_id: redemptionData.redemptionTransactionId,
+        scanned_at: redemptionData.scannedAt,
+        redeemed_at: new Date().toISOString(),
+        redemption_method: redemptionData.redemptionMethod
+      });
+
+    if (error) {
+      throw new Error(`Failed to record redemption: ${error.message}`);
+    }
+  }
+
+  /**
+   * Record user wallet activity
+   */
+  async recordUserActivity(activityData: {
+    userAccountId: string;
+    activityType: 'claim' | 'redeem' | 'transfer';
+    nftId?: string;
+    transactionId?: string;
+    details?: any;
+  }): Promise<void> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { error } = await this.supabase
+      .from('user_wallet_activity')
+      .insert({
+        user_account_id: activityData.userAccountId,
+        activity_type: activityData.activityType,
+        nft_id: activityData.nftId,
+        transaction_id: activityData.transactionId,
+        details: activityData.details,
+        created_at: new Date().toISOString()
+      });
+
+    if (error) {
+      throw new Error(`Failed to record user activity: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get redemption history for a merchant
+   */
+  async getRedemptionHistory(merchantAccountId: string): Promise<any[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('coupon_redemptions')
+      .select('*')
+      .eq('merchant_account_id', merchantAccountId)
+      .order('redeemed_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to get redemption history: ${error.message}`);
+    }
+
+    return data || [];
   }
 
   /**

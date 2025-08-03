@@ -135,9 +135,9 @@ export class MerchantService {
 
       // Create merchant account (we pay the fee)
       const accountCreateTx = new AccountCreateTransaction()
-        .setKey(hederaPublicKey) // Use THEIR public key
-        .setInitialBalance(new Hbar(2)) // Give merchant some starting HBAR
-        .setMaxAutomaticTokenAssociations(100) // Allow auto-association of tokens
+        .setKey(hederaPublicKey) // Use THEIR public key --> this should be the DYSCO public key, same as all merchants!
+        .setInitialBalance(new Hbar(2)) // Give merchant some starting HBAR --> no, it doesnt need hbar
+        .setMaxAutomaticTokenAssociations(100) // Allow auto-association of tokens --> no it doesnt need this
         .setMaxTransactionFee(new Hbar(2)); // We pay up to 2 HBAR for account creation
 
       const accountCreateResponse = await accountCreateTx.execute(this.client);
@@ -186,13 +186,12 @@ export class MerchantService {
   }
 
   /**
-   * Legacy method: Create Hedera account for merchant (we pay the fees)
+   * Create Hedera representation account for merchant using operator's key
    */
   async createMerchantAccount(merchantId: string): Promise<{
     success: boolean;
     accountId?: string;
     publicKey?: string;
-    privateKey?: string; // Added for demo co-signing
     error?: string;
   }> {
     try {
@@ -201,16 +200,19 @@ export class MerchantService {
         throw new Error('Merchant not found');
       }
 
-      // Generate new key pair for the merchant
-      const merchantPrivateKey = PrivateKey.generateED25519();
-      const merchantPublicKey = merchantPrivateKey.publicKey;
+      console.log(`🏢 Creating representation account for merchant: ${merchant.name}`);
+      console.log(`🔑 Using operator's key (no new keys generated)`);
 
-      // Create merchant account (we pay the fee)
+      // Use operator's public key (same key as Dysco's account 0.0.1293)
+      if (!this.client.operatorPublicKey) {
+        throw new Error('Operator public key not available');
+      }
+
+      // Create merchant account using OPERATOR'S key (pure representation)
       const accountCreateTx = new AccountCreateTransaction()
-        .setKey(merchantPublicKey)
-        .setInitialBalance(new Hbar(2)) // Give merchant some starting HBAR
-        .setMaxAutomaticTokenAssociations(100) // Allow auto-association of tokens
-        .setMaxTransactionFee(new Hbar(2)); // We pay up to 2 HBAR for account creation
+        .setKey(this.client.operatorPublicKey) // Same key as operator
+        .setInitialBalance(0) // No HBAR needed - operator pays everything
+        .setMaxTransactionFee(20); // Operator pays this fee
 
       const accountCreateResponse = await accountCreateTx.execute(this.client);
       const accountCreateReceipt = await accountCreateResponse.getReceipt(this.client);
@@ -219,34 +221,33 @@ export class MerchantService {
         throw new Error('Failed to create merchant account');
       }
 
-      // Update merchant data (store private key for demo co-signing)
+      // Update merchant data (NO private key storage - use operator's)
       merchant.hederaAccountId = accountCreateReceipt.accountId.toString();
-      merchant.hederaPublicKey = merchantPublicKey.toStringDer();
+      merchant.hederaPublicKey = this.client.operatorPublicKey.toString(); // Same as operator
       merchant.onboardingStatus = 'account_created';
-      
-      // Store private key in merchant data for demo (NEVER do this in production!)
-      (merchant as any).privateKey = merchantPrivateKey.toStringDer();
       
       // Update in database instead of memory
       if (databaseService.isConnected()) {
-        await databaseService.updateMerchant(merchant.hederaAccountId!, {
+        await databaseService.updateMerchant(merchant.id, {
+          hedera_account_id: merchant.hederaAccountId!,
           hedera_public_key: merchant.hederaPublicKey!,
           onboarding_status: 'account_created'
         });
-        console.log(`✅ Updated legacy merchant account in database: ${merchant.hederaAccountId}`);
+        console.log(`✅ Updated merchant account in database: ${merchant.hederaAccountId}`);
       } else {
         // Fallback to memory storage
         this.merchantStorage.set(merchantId, merchant);
       }
 
-      console.log(`✅ Created Hedera account for merchant ${merchant.name}: ${merchant.hederaAccountId}`);
-      console.log(`🔐 Merchant private key stored for demo co-signing`);
+      console.log(`✅ Created Hedera representation account: ${merchant.hederaAccountId}`);
+      console.log(`🔐 Account uses operator's key (${this.client.operatorAccountId}) - no separate keys`);
+      console.log(`💰 No HBAR balance needed - operator pays all transactions`);
 
       return {
         success: true,
         accountId: merchant.hederaAccountId,
-        publicKey: merchant.hederaPublicKey,
-        privateKey: merchantPrivateKey.toStringDer() // Return for immediate use
+        publicKey: merchant.hederaPublicKey
+        // NO privateKey returned - operator handles all signing
       };
     } catch (error) {
       console.error('Error creating merchant account:', error);
@@ -308,7 +309,7 @@ export class MerchantService {
         if (merchant.onboardingStatus !== 'active') {
           updateData.onboarding_status = 'collection_created';
         }
-        await databaseService.updateMerchant(merchant.hederaAccountId!, updateData);
+        await databaseService.updateMerchant(merchant.id, updateData);
         console.log(`✅ Updated merchant collection ID in database: ${merchant.hederaAccountId}`);
       } else {
         // Fallback to memory storage
@@ -385,7 +386,7 @@ export class MerchantService {
       
       // Update in database instead of memory
       if (databaseService.isConnected()) {
-        await databaseService.updateMerchant(merchant.hederaAccountId!, {
+        await databaseService.updateMerchant(merchant.id, {
           nft_collection_id: merchant.nftCollectionId,
           onboarding_status: 'collection_created'
         });

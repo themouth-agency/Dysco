@@ -107,6 +107,83 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
     }
   });
 
+  // Get user's owned NFT coupons from Mirror Node
+  app.get('/api/users/:accountId/coupons', async (req, res) => {
+    try {
+      const { accountId } = req.params;
+
+      if (!accountId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Account ID is required'
+        });
+      }
+
+      console.log(`🔍 Fetching NFT coupons for user: ${accountId}`);
+
+      // Query user's NFTs from Mirror Node
+      const userNFTs = await MirrorNodeService.getAccountNFTs(accountId);
+      
+      // Filter only coupon NFTs and get their metadata
+      const couponNFTs = [];
+      
+      for (const nft of userNFTs) {
+        const nftId = `${nft.token_id}:${nft.serial_number}`;
+        
+        // Get metadata for this NFT
+        if (nftService) {
+          const metadata = nftService.getMetadata(nftId);
+          if (metadata) {
+            // Convert to Coupon format
+            const coupon = {
+              id: nftId,
+              name: metadata.name,
+              description: metadata.description,
+              merchant: metadata.properties.merchant,
+              value: metadata.properties.value,
+              category: metadata.properties.category,
+              validUntil: metadata.properties.validUntil,
+              imageUrl: metadata.image,
+              termsAndConditions: metadata.properties.termsAndConditions,
+              isAvailable: false, // User already owns this
+              tokenId: nft.token_id,
+              serialNumber: nft.serial_number,
+              status: 'owned'
+            };
+            couponNFTs.push(coupon);
+          }
+        }
+      }
+
+      console.log(`✅ Found ${couponNFTs.length} coupon NFTs for user ${accountId}`);
+
+      res.json({
+        success: true,
+        coupons: couponNFTs,
+        count: couponNFTs.length
+      });
+
+    } catch (error) {
+      console.error('Error getting user coupons:', error);
+      
+      // If account doesn't exist yet, return empty array instead of error
+      if (error instanceof Error && error.message.includes('404')) {
+        console.log(`User ${req.params.accountId} not found in Mirror Node yet, returning empty coupons`);
+        res.json({
+          success: true,
+          coupons: [],
+          count: 0
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Failed to get user coupons',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  });
+
   // Get account balance from Mirror Node
   app.get('/api/wallet/balance/:accountId', async (req, res) => {
     try {
@@ -233,48 +310,168 @@ app.get('/api/coupons/available', (req, res) => {
   res.json({ coupons: mockCoupons });
 });
 
-// Claim coupon
+// Claim coupon (transfer NFT to user)
 app.post('/api/coupons/claim', async (req, res) => {
   try {
-    const { couponId, userWalletAddress } = req.body;
+    const { nftId, userAccountId } = req.body;
 
-    // Mock response for now - will implement actual NFT transfer later
+    if (!nftId || !userAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nftId, userAccountId'
+      });
+    }
+
+    if (!nftService) {
+      return res.status(500).json({
+        success: false,
+        error: 'NFT service not initialized'
+      });
+    }
+
+    // Parse NFT ID to get token ID and serial number
+    const [tokenId, serialNumberStr] = nftId.split(':');
+    const serialNumber = parseInt(serialNumberStr);
+
+    if (!tokenId || isNaN(serialNumber)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid NFT ID format'
+      });
+    }
+
+    console.log(`🎫 Transferring coupon NFT: ${nftId} to user: ${userAccountId}`);
+
+    // First, associate the token with the user's account (if not already associated)
+    const { TokenAssociateTransaction, TransferTransaction, AccountId, TokenId } = await import('@hashgraph/sdk');
+
+    // Note: In a real implementation, you'd want to check if the token is already associated
+    // For now, we'll try to associate and ignore errors if already associated
+    try {
+      console.log(`🔗 Associating token ${tokenId} with user account ${userAccountId}`);
+      
+      // Create association transaction (user would need to sign this in a real app)
+      // For demo purposes, we'll skip this step as it requires user's private key
+      console.log(`⚠️ Token association skipped - would require user signature in production`);
+    } catch (associateError) {
+      console.log(`ℹ️ Token association may have failed (likely already associated): ${associateError}`);
+    }
+
+    // Transfer NFT from operator (treasury) to user
+    const transferTransaction = new TransferTransaction()
+      .addNftTransfer(
+        TokenId.fromString(tokenId),
+        serialNumber,
+        hederaClient.operatorAccountId!, // From operator (current owner)
+        AccountId.fromString(userAccountId) // To user
+      )
+      .setMaxTransactionFee(20); // 20 HBAR max fee
+
+    const transferResponse = await transferTransaction.execute(hederaClient);
+    const transferReceipt = await transferResponse.getReceipt(hederaClient);
+
+    console.log(`✅ Successfully transferred NFT ${nftId} to user ${userAccountId}, transaction: ${transferResponse.transactionId.toString()}`);
+
     res.json({
       success: true,
       message: 'Coupon claimed successfully',
-      couponId,
-      userWalletAddress,
-      transactionId: 'mock-tx-id-' + Date.now()
+      nftId,
+      userAccountId,
+      transactionId: transferResponse.transactionId.toString(),
+      claimedAt: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('Error claiming coupon:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to claim coupon'
+      error: 'Failed to claim coupon',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
-// Redeem coupon
+// Redeem coupon (burn/wipe NFT)
 app.post('/api/coupons/redeem', async (req, res) => {
   try {
-    const { couponId, merchantId, qrData } = req.body;
+    const { nftId, userAccountId, merchantScan, scannedAt } = req.body;
 
-    // Mock response for now - will implement actual NFT transfer later
+    if (!nftId || !userAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nftId, userAccountId'
+      });
+    }
+
+    if (!nftService) {
+      return res.status(500).json({
+        success: false,
+        error: 'NFT service not initialized'
+      });
+    }
+
+    // Parse NFT ID to get token ID and serial number
+    const [tokenId, serialNumberStr] = nftId.split(':');
+    const serialNumber = parseInt(serialNumberStr);
+
+    if (!tokenId || isNaN(serialNumber)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid NFT ID format'
+      });
+    }
+
+    console.log(`🔥 Redeeming coupon NFT: ${nftId} from user: ${userAccountId}`);
+
+    // Import TokenWipeTransaction for burning NFTs
+    const { TokenWipeTransaction } = await import('@hashgraph/sdk');
+
+    // Wipe (burn) the NFT from the user's account
+    const wipeTransaction = new TokenWipeTransaction()
+      .setTokenId(tokenId)
+      .setAccountId(userAccountId)
+      .setSerials([serialNumber])
+      .setMaxTransactionFee(20); // 20 HBAR max fee
+
+    const wipeResponse = await wipeTransaction.execute(hederaClient);
+    const wipeReceipt = await wipeResponse.getReceipt(hederaClient);
+
+    console.log(`✅ Successfully burned NFT ${nftId}, transaction: ${wipeResponse.transactionId.toString()}`);
+
+    // Store redemption record in database if connected
+    if (databaseService.isConnected()) {
+      try {
+        // Store redemption record
+        await databaseService.recordRedemption({
+          nftId,
+          userAccountId,
+          merchantAccountId: tokenId, // Use token ID to find merchant
+          redemptionTransactionId: wipeResponse.transactionId.toString(),
+          scannedAt: scannedAt || new Date().toISOString(),
+          redemptionMethod: merchantScan ? 'qr_scan' : 'direct'
+        });
+        console.log(`📝 Stored redemption record for ${nftId}`);
+      } catch (dbError) {
+        console.error('Failed to store redemption record:', dbError);
+        // Don't fail the transaction for DB errors
+      }
+    }
+
     res.json({
       success: true,
       message: 'Coupon redeemed successfully',
-      couponId,
-      merchantId,
-      transactionId: 'mock-tx-id-' + Date.now()
+      nftId,
+      userAccountId,
+      transactionId: wipeResponse.transactionId.toString(),
+      scannedAt: scannedAt || new Date().toISOString()
     });
 
   } catch (error) {
     console.error('Error redeeming coupon:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to redeem coupon'
+      error: 'Failed to redeem coupon',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -455,7 +652,7 @@ app.get('/api/nft/metadata', (req, res) => {
   }
 });
 
-// Merchant Registration with Device-Generated Keys (Secure!)
+// Simple Merchant Registration (Backend-managed Hedera accounts)
 app.post('/api/merchants/register-with-key', async (req, res) => {
   try {
     if (!merchantService) {
@@ -465,62 +662,86 @@ app.post('/api/merchants/register-with-key', async (req, res) => {
       });
     }
 
-    const { name, email, businessType, fiatPaymentAmount, publicKey } = req.body;
+    const { name, email, businessType, userId } = req.body;
 
-    if (!name || !email || !businessType || !fiatPaymentAmount || !publicKey) {
+    if (!name || !email || !businessType) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: name, email, businessType, fiatPaymentAmount, publicKey'
+        error: 'Missing required fields: name, email, businessType'
       });
     }
 
-    console.log(`🔐 Registering merchant with device-generated key: ${name}`);
+    console.log(`🆔 Supabase User ID: ${userId}`);
 
-    // Step 1: Register merchant
-    const registration = { name, email, businessType, fiatPaymentAmount };
-    const registerResult = await merchantService.registerMerchant(registration);
+    console.log(`🏢 Registering merchant (backend-managed): ${name}`);
+
+    // Generate a unique merchant ID if not provided
+    const merchantId = userId || `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Step 1: Create Hedera account using OPERATOR'S key (pure representation)
+    const { AccountCreateTransaction } = await import('@hashgraph/sdk');
     
-    if (!registerResult.success) {
-      throw new Error(registerResult.error || 'Failed to register merchant');
+    console.log('🔐 Creating Hedera representation account with operator key...');
+    console.log(`🔑 Using operator public key: ${hederaClient.operatorPublicKey!.toString()}`);
+    
+    // Create new account with SAME keys as operator (pure representation)
+    if (!hederaClient.operatorPublicKey) {
+      throw new Error('Operator public key not available');
+    }
+    
+    const newAccount = new AccountCreateTransaction()
+      .setKey(hederaClient.operatorPublicKey) // Same key as operator
+      .setInitialBalance(0) // No HBAR needed - operator pays everything
+      .setMaxTransactionFee(20); // Operator pays this fee too
+
+    const createResponse = await newAccount.execute(hederaClient);
+    const createReceipt = await createResponse.getReceipt(hederaClient);
+    const hederaAccountId = createReceipt.accountId!.toString();
+    
+    console.log(`✅ Created Hedera account: ${hederaAccountId}`);
+
+    // Step 2: Store merchant info in database
+    if (databaseService.isConnected()) {
+      await databaseService.createMerchant({
+        hedera_account_id: hederaAccountId,
+        id: merchantId,
+        name,
+        email,
+        business_type: businessType,
+        hedera_public_key: hederaClient.operatorPublicKey!.toString(),
+        fiat_payment_status: 'pending',
+        onboarding_status: 'active', // Set to active immediately - ready to create coupons
+      });
+
+      console.log(`💾 Stored merchant in database: ${merchantId}`);
+      console.log(`✅ Merchant marked as active - ready to create coupons`);
     }
 
-    const merchantId = registerResult.merchantId!;
-
-    // Step 2: Create Hedera account using the PROVIDED public key
-    const accountResult = await merchantService.createMerchantAccountWithKey(merchantId, publicKey);
-    
-    if (!accountResult.success) {
-      throw new Error(accountResult.error || 'Failed to create merchant account');
-    }
-
-    // Step 3: Mark merchant as ready (collection created when first coupon is minted)
-    console.log(`🎫 Merchant registered - collection will be created on first coupon mint`);
-
-    // Step 4: Activate merchant
-    const activateResult = await merchantService.activateMerchant(merchantId);
-    
-    if (!activateResult.success) {
-      throw new Error(activateResult.error || 'Failed to activate merchant');
-    }
-
-    const merchant = await merchantService.getMerchantAsync(merchantId);
+    const merchant = {
+      id: merchantId,
+      name,
+      email,
+      businessType,
+      hederaAccountId,
+      onboardingStatus: 'active'
+    };
 
     res.json({
       success: true,
-      message: 'Merchant registered successfully with device-generated keys',
+      message: 'Merchant registered successfully (backend-managed)',
       merchant: {
-        id: merchant!.id,
-        name: merchant!.name,
-        email: merchant!.email,
-        businessType: merchant!.businessType,
-        hederaAccountId: merchant!.hederaAccountId,
+        id: merchant.id,
+        name: merchant.name,
+        email: merchant.email,
+        businessType: merchant.businessType,
+        hederaAccountId: merchant.hederaAccountId,
         nftCollectionId: null, // Collection created on first coupon mint
-        onboardingStatus: merchant!.onboardingStatus
+        onboardingStatus: merchant.onboardingStatus
       }
     });
 
   } catch (error) {
-    console.error('Error in secure merchant registration:', error);
+    console.error('Error in merchant registration:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to register merchant'
@@ -1032,6 +1253,43 @@ app.post('/api/merchants/recover', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to recover merchant account'
+    });
+  }
+});
+
+// Get merchant redemption history
+app.get('/api/merchants/:merchantAccountId/redemptions', async (req, res) => {
+  try {
+    const { merchantAccountId } = req.params;
+
+    if (!merchantAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Merchant account ID is required'
+      });
+    }
+
+    if (!databaseService.isConnected()) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database not connected'
+      });
+    }
+
+    const redemptions = await databaseService.getRedemptionHistory(merchantAccountId);
+
+    res.json({
+      success: true,
+      redemptions,
+      count: redemptions.length
+    });
+
+  } catch (error) {
+    console.error('Error getting redemption history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get redemption history',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
