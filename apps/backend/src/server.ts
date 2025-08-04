@@ -227,7 +227,11 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
                 isAvailable: false, // User already owns this
                 tokenId: nft.token_id,
                 serialNumber: nft.serial_number,
-                status: 'owned'
+                status: 'owned',
+                // Campaign information for redemption flow
+                campaignType: metadata.properties?.redemptionType || 'qr_redeem',
+                discountCode: metadata.properties?.discountCode || null,
+                redemptionType: metadata.properties?.redemptionType || 'qr_redeem'
               };
               couponNFTs.push(coupon);
               console.log(`✅ Added coupon: ${metadata.name || 'Unknown'}`);
@@ -388,12 +392,21 @@ app.get('/api/campaigns/discover', async (req, res) => {
           const now = new Date();
           const endDate = new Date(campaign.end_date);
           
-          if (campaign.is_active && now <= endDate) {
+          if (campaign.is_active && campaign.is_discoverable && now <= endDate) {
             // Count available coupons for this campaign
             const campaignCoupons = await databaseService.getCampaignCoupons(campaign.id);
+            console.log(`🔍 Campaign "${campaign.name}": Found ${campaignCoupons.length} total coupons`);
+            
             const availableCount = campaignCoupons.filter(coupon => 
               coupon.redemption_status === 'active' && !coupon.owner_account_id
             ).length;
+            
+            // Debug: Show coupon states
+            campaignCoupons.forEach(coupon => {
+              console.log(`  📋 Coupon ${coupon.nft_id}: status=${coupon.redemption_status}, owner=${coupon.owner_account_id || 'none'}`);
+            });
+            
+            console.log(`✅ Campaign "${campaign.name}": ${availableCount} available coupons (discoverable: ${campaign.is_discoverable})`);
             
             if (availableCount > 0) {
               discoverableCampaigns.push({
@@ -1554,7 +1567,7 @@ app.post('/api/merchants/create-record', async (req, res) => {
 app.post('/api/merchants/:merchantId/campaigns', async (req, res) => {
   try {
     const { merchantId } = req.params;
-    const { name, description, campaignType, discountType, discountValue, startDate, endDate, imageUrl, maxRedemptionsPerUser, totalLimit } = req.body;
+    const { name, description, campaignType, discountType, discountValue, startDate, endDate, imageUrl, maxRedemptionsPerUser, totalLimit, isDiscoverable } = req.body;
 
     // Validate required fields
     if (!name || !campaignType || !discountType || !discountValue || !startDate || !endDate) {
@@ -1580,7 +1593,8 @@ app.post('/api/merchants/:merchantId/campaigns', async (req, res) => {
       image_url: imageUrl,
       max_redemptions_per_user: maxRedemptionsPerUser || 1,
       total_limit: totalLimit,
-      is_active: true
+      is_active: true,
+      is_discoverable: isDiscoverable !== undefined ? isDiscoverable : true
     });
 
     console.log(`✅ Created campaign: ${campaign.name} for merchant ${merchantId}`);
@@ -2086,6 +2100,111 @@ app.post('/api/coupons/burn', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to burn coupon',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Redeem discount code coupon (burn NFT and get discount code)
+app.post('/api/coupons/redeem-discount-code', async (req, res) => {
+  try {
+    const { nftId, userAccountId, userPrivateKey } = req.body;
+
+    if (!nftId || !userAccountId || !userPrivateKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nftId, userAccountId, userPrivateKey'
+      });
+    }
+
+    // Get coupon details to verify it's a discount code campaign
+    const couponRecord = await databaseService.getNFTCoupon(nftId);
+    if (!couponRecord || couponRecord.owner_account_id !== userAccountId) {
+      return res.status(404).json({
+        success: false,
+        error: 'Coupon not found or not owned by user'
+      });
+    }
+
+    if (couponRecord.redemption_status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'Coupon is not active for redemption'
+      });
+    }
+
+    // Get campaign details to check if it's a discount code campaign
+    const campaign = await databaseService.getCampaign(couponRecord.campaign_id);
+    if (!campaign || campaign.campaign_type !== 'discount_code') {
+      return res.status(400).json({
+        success: false,
+        error: 'This coupon is not a discount code campaign'
+      });
+    }
+
+    console.log(`💳 Redeeming discount code coupon ${nftId} for user ${userAccountId}`);
+
+    // Burn the NFT
+    const { TokenWipeTransaction, Hbar } = await import('@hashgraph/sdk');
+
+    const wipeTransaction = new TokenWipeTransaction()
+      .setTokenId(couponRecord.token_id)
+      .setAccountId(userAccountId)
+      .setSerials([couponRecord.serial_number])
+      .setMaxTransactionFee(new Hbar(2))
+      .freezeWith(hederaClient);
+
+    const wipeResponse = await wipeTransaction.execute(hederaClient);
+    const wipeReceipt = await wipeResponse.getReceipt(hederaClient);
+
+    if (wipeReceipt.status.toString() !== 'SUCCESS') {
+      throw new Error(`Wipe failed with status: ${wipeReceipt.status.toString()}`);
+    }
+
+    // Update database
+    await databaseService.updateNFTCoupon(nftId, { 
+      redemption_status: 'redeemed', 
+      redeemed_at: new Date().toISOString() 
+    });
+
+    // Record redemption
+    if (databaseService.isConnected()) {
+      try {
+        const merchants = await databaseService.getAllMerchants();
+        const merchant = merchants.find(m => m.hedera_account_id === couponRecord.merchant_account_id);
+        
+        if (merchant) {
+          await databaseService.recordRedemption({
+            nftId,
+            userAccountId,
+            merchantAccountId: merchant.id,
+            redemptionTransactionId: wipeResponse.transactionId.toString(),
+            scannedAt: new Date().toISOString(),
+            redemptionMethod: 'discount_code'
+          });
+        }
+      } catch (dbError) {
+        console.error('Failed to store redemption record:', dbError);
+      }
+    }
+
+    console.log(`✅ Successfully redeemed discount code coupon ${nftId}`);
+
+    res.json({
+      success: true,
+      message: 'Discount code redeemed successfully',
+      discountCode: couponRecord.discount_code,
+      campaignName: campaign.name,
+      discountType: campaign.discount_type,
+      discountValue: campaign.discount_value,
+      transactionId: wipeResponse.transactionId.toString()
+    });
+
+  } catch (error) {
+    console.error('Error redeeming discount code coupon:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to redeem discount code coupon',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

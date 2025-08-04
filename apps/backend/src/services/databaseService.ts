@@ -21,7 +21,7 @@ export interface CampaignRecord {
   name: string;
   description?: string;
   campaign_type: 'qr_redeem' | 'discount_code';
-  discount_type: 'percentage' | 'fixed_amount' | 'free_item';
+  discount_type: 'percentage' | 'fixed_amount' | 'free_item' | 'other';
   discount_value: number;
   start_date: string;
   end_date: string;
@@ -29,6 +29,7 @@ export interface CampaignRecord {
   max_redemptions_per_user: number;
   total_limit?: number;
   is_active: boolean;
+  is_discoverable: boolean;
   created_at: string;
 }
 
