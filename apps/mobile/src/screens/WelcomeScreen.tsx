@@ -4,11 +4,16 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   SafeAreaView,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAppMode } from '../contexts/AppModeContext';
+
+const { width, height } = Dimensions.get('window');
+const CIRCLE_SIZE = width * 0.45;
 
 type WelcomeScreenNavigationProp = StackNavigationProp<any, 'Welcome'>;
 
@@ -32,55 +37,76 @@ export default function WelcomeScreen({ navigation, onRoleSelected }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Logo and Branding */}
-        <View style={styles.logoContainer}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>🎫</Text>
-          </View>
-          <Text style={styles.appName}>Dysco</Text>
-          <Text style={styles.tagline}>Digital coupons powered by Hedera</Text>
-        </View>
-
-        {/* Role Selection */}
-        <View style={styles.roleContainer}>
-          <Text style={styles.roleTitle}>Welcome! How would you like to use Dysco?</Text>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* Header with Circular Video */}
+      <View style={styles.header}>
+        <View style={styles.circleContainer}>
+          {/* Background Video (will be added later) */}
+          <LinearGradient
+            colors={['#667eea', '#764ba2', '#f093fb']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.videoPlaceholder}
+          />
           
+          {/* Dysco Logo Overlay */}
+          <View style={styles.logoOverlay}>
+            <Text style={styles.logoText}>dysco</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.tagline}>COUPONS. FOR REAL.</Text>
+      </View>
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        <Text style={styles.welcomeTitle}>Welcome!</Text>
+        <Text style={styles.welcomeSubtitle}>How would you like to use Dysco?</Text>
+        
+        {/* Role Selection Cards */}
+        <View style={styles.cardsContainer}>
           <TouchableOpacity
-            style={[styles.roleButton, styles.customerButton]}
+            style={[styles.roleCard, styles.customerCard]}
             onPress={selectCustomerRole}
           >
-            <View style={styles.roleIcon}>
-              <Text style={styles.roleEmoji}>👤</Text>
+            <View style={styles.cardIcon}>
+              <Text style={styles.cardEmoji}>🛍️</Text>
             </View>
-            <View style={styles.roleTextContainer}>
-              <Text style={styles.roleButtonTitle}>I'm a Customer</Text>
-              <Text style={styles.roleButtonSubtitle}>Find and claim amazing deals from local businesses</Text>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle}>I'm a Customer</Text>
+              <Text style={styles.cardSubtitle}>Find and claim amazing deals from local businesses</Text>
             </View>
-            <Text style={styles.arrow}>→</Text>
+            <Text style={styles.cardArrow}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.roleButton, styles.merchantButton]}
+            style={[styles.roleCard, styles.merchantCard]}
             onPress={selectMerchantRole}
           >
-            <View style={styles.roleIcon}>
-              <Text style={styles.roleEmoji}>🏪</Text>
+            <View style={styles.cardIcon}>
+              <Text style={styles.cardEmoji}>🏪</Text>
             </View>
-            <View style={styles.roleTextContainer}>
-              <Text style={styles.roleButtonTitle}>I'm a Business Owner</Text>
-              <Text style={styles.roleButtonSubtitle}>Create and manage digital coupons for your business</Text>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle}>I'm a Business Owner</Text>
+              <Text style={styles.cardSubtitle}>Create and manage digital coupons for your business</Text>
             </View>
-            <Text style={styles.arrow}>→</Text>
+            <Text style={styles.cardArrow}>→</Text>
           </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Powered by Hedera • Secure • Instant • Tradeable
-          </Text>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.hederaContainer}>
+          <View style={styles.hederaIcon}>
+            <Text style={styles.hederaIconText}>H</Text>
+          </View>
+          <Text style={styles.hederaText}>Hedera</Text>
         </View>
+        <Text style={styles.footerText}>
+          Powered by Hedera • Secure • Instant • Tradeable
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -89,115 +115,163 @@ export default function WelcomeScreen({ navigation, onRoleSelected }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 30,
+    backgroundColor: '#FFFFFF',
+  },
+  circleContainer: {
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
+    borderRadius: CIRCLE_SIZE / 2,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 24,
+  },
+  videoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: CIRCLE_SIZE / 2,
+  },
+  logoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: CIRCLE_SIZE / 2,
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: '300',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    fontFamily: 'System',
+  },
+  tagline: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    letterSpacing: 2,
+    textAlign: 'center',
   },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
+    paddingTop: 20,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 60,
-  },
-  logoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#2563eb',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logoText: {
-    fontSize: 32,
-  },
-  appName: {
-    fontSize: 32,
+  welcomeTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#1e293b',
+    color: '#000000',
+    textAlign: 'center',
     marginBottom: 8,
   },
-  tagline: {
+  welcomeSubtitle: {
     fontSize: 16,
-    color: '#64748b',
+    color: '#666666',
     textAlign: 'center',
+    marginBottom: 40,
   },
-  roleContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    marginTop: -40,
+  cardsContainer: {
+    gap: 16,
   },
-  roleTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 28,
-  },
-  roleButton: {
+  roleCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  customerButton: {
+  customerCard: {
     borderLeftWidth: 4,
-    borderLeftColor: '#2563eb',
+    borderLeftColor: '#4285F4',
   },
-  merchantButton: {
+  merchantCard: {
     borderLeftWidth: 4,
-    borderLeftColor: '#059669',
+    borderLeftColor: '#34A853',
   },
-  roleIcon: {
+  cardIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  roleEmoji: {
-    fontSize: 20,
+  cardEmoji: {
+    fontSize: 24,
   },
-  roleTextContainer: {
+  cardContent: {
     flex: 1,
   },
-  roleButtonTitle: {
+  cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#1a1a1a',
     marginBottom: 4,
   },
-  roleButtonSubtitle: {
+  cardSubtitle: {
     fontSize: 14,
-    color: '#64748b',
+    color: '#666666',
     lineHeight: 20,
   },
-  arrow: {
+  cardArrow: {
     fontSize: 18,
-    color: '#cbd5e1',
+    color: '#CCCCCC',
     marginLeft: 8,
   },
   footer: {
     alignItems: 'center',
-    paddingBottom: 32,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  hederaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hederaIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  hederaIconText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  hederaText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#000000',
   },
   footerText: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#999999',
     textAlign: 'center',
+    lineHeight: 18,
   },
 }); 

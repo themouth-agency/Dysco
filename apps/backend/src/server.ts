@@ -385,7 +385,7 @@ app.get('/api/campaigns/discover', async (req, res) => {
     
     for (const merchant of allMerchants) {
       try {
-        const campaigns = await databaseService.getMerchantCampaigns(merchant.hedera_account_id);
+        const campaigns = await databaseService.getMerchantCampaigns(merchant.id);
         
         for (const campaign of campaigns) {
           // Only include active campaigns that haven't expired
@@ -395,18 +395,9 @@ app.get('/api/campaigns/discover', async (req, res) => {
           if (campaign.is_active && campaign.is_discoverable && now <= endDate) {
             // Count available coupons for this campaign
             const campaignCoupons = await databaseService.getCampaignCoupons(campaign.id);
-            console.log(`🔍 Campaign "${campaign.name}": Found ${campaignCoupons.length} total coupons`);
-            
             const availableCount = campaignCoupons.filter(coupon => 
               coupon.redemption_status === 'active' && !coupon.owner_account_id
             ).length;
-            
-            // Debug: Show coupon states
-            campaignCoupons.forEach(coupon => {
-              console.log(`  📋 Coupon ${coupon.nft_id}: status=${coupon.redemption_status}, owner=${coupon.owner_account_id || 'none'}`);
-            });
-            
-            console.log(`✅ Campaign "${campaign.name}": ${availableCount} available coupons (discoverable: ${campaign.is_discoverable})`);
             
             if (availableCount > 0) {
               discoverableCampaigns.push({

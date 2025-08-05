@@ -11,12 +11,15 @@ import { UserNavigator } from './src/navigation/UserNavigator';
 import { MerchantAuthNavigator } from './src/navigation/MerchantAuthNavigator';
 
 // Screens
+import SplashScreen from './src/screens/SplashScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 
 // Components
 import { ModeSwitcher } from './src/components/ModeSwitcher';
 
 export type RootStackParamList = {
+  Splash: undefined;
+  Welcome: undefined;
   Home: undefined;
   CouponDetail: { couponId: string };
   MyCoupons: undefined;
@@ -37,11 +40,24 @@ export type RootStackParamList = {
 
 function AppContent() {
   const { mode } = useAppMode();
+  const [showSplash, setShowSplash] = useState(true);
   const [hasSelectedRole, setHasSelectedRole] = useState(false);
 
   const handleLogout = () => {
     setHasSelectedRole(false);
+    setShowSplash(true);
   };
+
+  // Show splash screen initially
+  if (showSplash) {
+    return (
+      <SplashScreen
+        navigation={{
+          navigate: () => setShowSplash(false)
+        } as any}
+      />
+    );
+  }
 
   // Show welcome screen until user selects a role
   if (!hasSelectedRole) {

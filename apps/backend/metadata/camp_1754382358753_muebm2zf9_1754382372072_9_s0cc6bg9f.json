@@ -1,0 +1,52 @@
+{
+  "name": "Disco1",
+  "description": "Get amazing discounts on all summer items",
+  "image": "https://example.com/summer-sale.jpg",
+  "type": "object",
+  "attributes": [
+    {
+      "trait_type": "Campaign ID",
+      "value": "camp_1754382358753_muebm2zf9"
+    },
+    {
+      "trait_type": "Campaign Name",
+      "value": "Disco1"
+    },
+    {
+      "trait_type": "Discount Type",
+      "value": "percentage"
+    },
+    {
+      "trait_type": "Discount Value",
+      "value": "20"
+    },
+    {
+      "trait_type": "Redemption Type",
+      "value": "qr_redeem"
+    },
+    {
+      "trait_type": "Expires",
+      "value": "2025-09-05T00:00:00"
+    },
+    {
+      "trait_type": "Max Redemptions Per User",
+      "value": "10"
+    },
+    {
+      "trait_type": "Merchant",
+      "value": "Central Perk Coffee"
+    }
+  ],
+  "properties": {
+    "merchant": "Central Perk Coffee",
+    "discountType": "percentage",
+    "discountValue": 20,
+    "campaignId": "camp_1754382358753_muebm2zf9",
+    "campaignName": "Disco1",
+    "expiresAt": "2025-09-05T00:00:00",
+    "validUntil": "2025-09-05T00:00:00",
+    "redemptionType": "qr_redeem",
+    "maxRedemptionsPerUser": 10,
+    "merchantAccountId": "0.0.6494888"
+  }
+}
