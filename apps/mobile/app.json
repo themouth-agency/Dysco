@@ -28,6 +28,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "dysco",
+    "plugins": [
+      "expo-camera"
+    ]
   }
 }

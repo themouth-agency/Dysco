@@ -7,11 +7,23 @@ import { supabaseAuthService } from '../services/supabaseAuth';
 import MerchantAuthScreen from '../screens/merchant/MerchantAuthScreen';
 import MerchantDashboardScreen from '../screens/merchant/MerchantDashboardScreen';
 import CreateCouponScreen from '../screens/merchant/CreateCouponScreen';
+import QRScannerScreen from '../screens/merchant/QRScannerScreen';
+import RedemptionHistoryScreen from '../screens/merchant/RedemptionHistoryScreen';
+import MerchantSettingsScreen from '../screens/merchant/MerchantSettingsScreen';
+import CampaignDashboardScreen from '../screens/merchant/CampaignDashboardScreen';
+import CreateCampaignScreen from '../screens/merchant/CreateCampaignScreen';
+import CampaignDetailsScreen from '../screens/merchant/CampaignDetailsScreen';
 
 export type MerchantStackParamList = {
   MerchantAuth: undefined;
   MerchantDashboard: undefined;
   CreateCoupon: undefined;
+  QRScanner: undefined;
+  RedemptionHistory: undefined;
+  MerchantSettings: undefined;
+  CampaignDashboard: undefined;
+  CreateCampaign: undefined;
+  CampaignDetails: { campaignId: string };
 };
 
 const Stack = createStackNavigator<MerchantStackParamList>();
@@ -114,8 +126,39 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
             component={CreateCouponScreen}
             options={{ title: 'Create Coupon' }}
           />
+          <Stack.Screen
+            name="QRScanner"
+            component={QRScannerScreen}
+            options={{ title: 'Scan Coupon' }}
+          />
+          <Stack.Screen
+            name="RedemptionHistory"
+            component={RedemptionHistoryScreen}
+            options={{ title: 'Redemption History' }}
+          />
+          <Stack.Screen
+            name="MerchantSettings"
+            component={MerchantSettingsScreen}
+            options={{ title: 'Merchant Settings' }}
+          />
+          <Stack.Screen
+            name="CampaignDashboard"
+            component={CampaignDashboardScreen}
+            options={{ title: 'Campaign Dashboard' }}
+          />
+          <Stack.Screen
+            name="CreateCampaign"
+            component={CreateCampaignScreen}
+            options={{ title: 'Create Campaign' }}
+          />
+          <Stack.Screen
+            name="CampaignDetails"
+            component={CampaignDetailsScreen}
+            options={{ title: 'Campaign Details' }}
+          />
         </>
       )}
+
     </Stack.Navigator>
   );
 }; 

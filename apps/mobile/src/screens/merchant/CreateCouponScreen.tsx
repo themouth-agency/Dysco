@@ -99,7 +99,7 @@ export default function CreateCouponScreen({ navigation }: Props) {
       }
 
       // Send request to backend
-      const API_BASE_URL = 'http://192.168.0.162:3001';
+      const API_BASE_URL = 'http://192.168.0.49:3001';
       const response = await fetch(`${API_BASE_URL}/api/merchants/mint-coupon`, {
         method: 'POST',
         headers: {

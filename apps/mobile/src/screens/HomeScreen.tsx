@@ -16,12 +16,27 @@ import { userWalletService } from '../services/userWallet';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
+interface Campaign {
+  id: string;
+  name: string;
+  description: string;
+  merchant: string;
+  merchantId: string;
+  discountType: string;
+  discountValue: number;
+  imageUrl?: string;
+  expiresAt: string;
+  availableCount: number;
+  maxRedemptionsPerUser: number;
+  status: string;
+}
+
 interface Props {
   navigation: HomeScreenNavigationProp;
 }
 
 export default function HomeScreen({ navigation }: Props) {
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasWallet, setHasWallet] = useState<boolean | null>(null);
@@ -34,13 +49,17 @@ export default function HomeScreen({ navigation }: Props) {
     try {
       setLoading(true);
       
+      // Debug wallet storage
+      await userWalletService.debugWalletStorage();
+      
       // Check if user has a wallet
       const isAuthenticated = await userWalletService.isAuthenticated();
+      console.log('🏠 HomeScreen wallet check result:', isAuthenticated);
       setHasWallet(isAuthenticated);
       
       if (isAuthenticated) {
-        // Only load coupons if user has a wallet
-        await loadCoupons();
+        // Only load campaigns if user has a wallet
+        await loadCampaigns();
       }
     } catch (error) {
       console.error('Error checking wallet status:', error);
@@ -50,14 +69,14 @@ export default function HomeScreen({ navigation }: Props) {
     }
   };
 
-  const loadCoupons = async () => {
+  const loadCampaigns = async () => {
     try {
       setLoading(true);
       const data = await fetchAvailableCoupons();
-      setCoupons(data.coupons);
+      setCampaigns(data.campaigns);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load coupons');
-      console.error('Error loading coupons:', error);
+      Alert.alert('Error', 'Failed to load campaigns');
+      console.error('Error loading campaigns:', error);
     } finally {
       setLoading(false);
     }
@@ -65,23 +84,40 @@ export default function HomeScreen({ navigation }: Props) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadCoupons();
+    await loadCampaigns();
     setRefreshing(false);
   };
 
-  const renderCoupon = ({ item }: { item: Coupon }) => (
+  const formatDiscount = (type: string, value: number): string => {
+    switch (type) {
+      case 'percentage':
+        return `${value}% OFF`;
+      case 'fixed_amount':
+        return `$${value} OFF`;
+      case 'free_item':
+        return 'FREE ITEM';
+      default:
+        return `${value} OFF`;
+    }
+  };
+
+  const renderCampaign = ({ item }: { item: Campaign }) => (
     <TouchableOpacity
-      style={styles.couponCard}
-      onPress={() => navigation.navigate('CouponDetail', { couponId: item.id })}
+      style={styles.campaignCard}
+      onPress={() => navigation.navigate('ClaimCoupon', { campaignId: item.id })}
     >
-      <View style={styles.couponHeader}>
-        <Text style={styles.couponName}>{item.name}</Text>
-        <Text style={styles.discountText}>{item.discountPercent}% OFF</Text>
+      <View style={styles.campaignHeader}>
+        <Text style={styles.campaignName}>{item.name}</Text>
+        <Text style={styles.discountText}>{formatDiscount(item.discountType, item.discountValue)}</Text>
       </View>
-      <Text style={styles.couponDescription}>{item.description}</Text>
-      <Text style={styles.expiryText}>
-        Expires: {item.expiresAt ? new Date(item.expiresAt).toLocaleDateString() : new Date(item.validUntil).toLocaleDateString()}
-      </Text>
+      <Text style={styles.merchantText}>by {item.merchant}</Text>
+      <Text style={styles.campaignDescription}>{item.description}</Text>
+      <View style={styles.campaignFooter}>
+        <Text style={styles.availableText}>{item.availableCount} available</Text>
+        <Text style={styles.expiryText}>
+          Expires: {new Date(item.expiresAt).toLocaleDateString()}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -116,7 +152,7 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Available Coupons</Text>
+        <Text style={styles.title}>Discover Campaigns</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
             style={styles.headerButton}
@@ -134,8 +170,8 @@ export default function HomeScreen({ navigation }: Props) {
       </View>
 
       <FlatList
-        data={coupons}
-        renderItem={renderCoupon}
+        data={campaigns}
+        renderItem={renderCampaign}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         refreshControl={
@@ -144,7 +180,7 @@ export default function HomeScreen({ navigation }: Props) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {loading ? 'Loading coupons...' : 'No coupons available'}
+              {loading ? 'Loading campaigns...' : 'No campaigns available'}
             </Text>
           </View>
         }
@@ -229,6 +265,58 @@ const styles = StyleSheet.create({
   expiryText: {
     fontSize: 12,
     color: '#9ca3af',
+  },
+  // Campaign styles
+  campaignCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  campaignHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  campaignName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    flex: 1,
+  },
+  merchantText: {
+    fontSize: 14,
+    color: '#7c3aed',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  campaignDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  campaignFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  availableText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   emptyContainer: {
     flex: 1,

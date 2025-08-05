@@ -5,16 +5,17 @@ const SUPABASE_URL = 'https://fyhwypwrlgzrosbhccnp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5aHd5cHdybGd6cm9zYmhjY25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MzczNDQsImV4cCI6MjA2OTMxMzM0NH0.TSP5FmaGgARt50WB1TvJ2p8JPt-fWyUhQ8YI3SeyqXs';
 
 export interface MerchantProfile {
-  id: string;
+  hedera_account_id: string; // Primary key
+  id: string; // Supabase user ID
   email: string;
-  name?: string;
-  business_name?: string;
-  business_type?: string;
-  hedera_account_id?: string;
+  name: string;
+  business_type: string;
+  hedera_public_key: string;
   nft_collection_id?: string;
+  fiat_payment_status?: 'pending' | 'paid' | 'failed';
   onboarding_status?: 'pending' | 'account_created' | 'collection_created' | 'active';
   created_at: string;
-  updated_at: string;
+  activated_at?: string;
 }
 
 export interface AuthResult {
@@ -66,7 +67,87 @@ class SupabaseAuthService {
   }
 
   /**
-   * Sign up with email and password
+   * Sign up with email and password (wrapper for compatibility)
+   */
+  async signUp(userData: {
+    email: string;
+    password: string;
+    businessName: string;
+    businessType: string;
+  }): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      // First, create the Supabase auth user
+      const { data, error } = await this.supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            business_name: userData.businessName,
+            business_type: userData.businessType,
+          }
+        }
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (data.user) {
+        // Always create the merchant profile during registration
+        // Email confirmation can happen later, but profile needs to exist
+        try {
+          console.log('🏗️ Creating merchant profile during registration...');
+          const API_BASE_URL = 'http://192.168.0.49:3001';
+          const response = await fetch(`${API_BASE_URL}/api/merchants/register-with-key`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              name: userData.businessName,
+              email: userData.email,
+              businessType: userData.businessType,
+              userId: data.user.id
+            }),
+          });
+
+          const result = await response.json();
+          
+          if (result.success) {
+            console.log('✅ Merchant Hedera account created:', result.merchant.hederaAccountId);
+          } else {
+            console.error('Backend merchant creation failed:', result.error);
+            // Don't fail the Supabase registration for this
+          }
+        } catch (backendError) {
+          console.error('Error calling backend merchant registration:', backendError);
+          // Don't fail the Supabase registration for this
+        }
+
+        // Check if email confirmation is required
+        if (!data.user.email_confirmed_at && !data.session) {
+          return { 
+            success: true, 
+            user: data.user,
+            message: 'Please check your email and click the confirmation link to complete setup.',
+            profileCreated: true // Indicates profile was created during registration
+          };
+        }
+
+        return { success: true, user: data.user, profileCreated: true };
+      }
+
+      return { success: false, error: 'Registration failed' };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Sign up with email and password (original method)
    */
   async signUpWithEmail(email: string, password: string, merchantData?: {
     name: string;
@@ -105,7 +186,34 @@ class SupabaseAuthService {
   }
 
   /**
-   * Sign in with email and password
+   * Sign in with email and password (wrapper for compatibility)
+   */
+  async signIn(email: string, password: string): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      const { data, error } = await this.supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        user: data.user
+      };
+    } catch (error) {
+      console.error('Error signing in:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to sign in'
+      };
+    }
+  }
+
+  /**
+   * Sign in with email and password (original method)
    */
   async signInWithEmail(email: string, password: string): Promise<AuthResult> {
     try {

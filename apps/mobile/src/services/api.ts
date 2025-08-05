@@ -1,6 +1,6 @@
 import { Coupon } from '../types';
 
-const API_BASE_URL = 'http://192.168.0.162:3001'; // Your computer's IP address
+const API_BASE_URL = 'http://192.168.0.49:3001'; // Your computer's IP address
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -8,40 +8,24 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
-export const fetchAvailableCoupons = async (): Promise<{ coupons: Coupon[] }> => {
+export const fetchAvailableCoupons = async (): Promise<{ campaigns: any[] }> => {
   try {
-    // Fetch all NFT metadata from our backend
-    const response = await fetch(`${API_BASE_URL}/api/nft/metadata`);
+    // Fetch discoverable campaigns from our backend
+    const response = await fetch(`${API_BASE_URL}/api/campaigns/discover`);
     const data = await response.json();
     
     if (!data.success) {
-      throw new Error('Failed to fetch NFT metadata');
+      throw new Error('Failed to fetch discoverable campaigns');
     }
 
-    // Transform NFT metadata to Coupon format
-    const coupons: Coupon[] = data.metadata.map((item: any) => ({
-      id: item.nftId,
-      name: item.metadata.name,
-      description: item.metadata.description,
-      merchant: item.metadata.properties.merchant,
-      value: item.metadata.properties.value,
-      category: item.metadata.properties.category,
-      validUntil: item.metadata.properties.validUntil,
-      imageUrl: item.metadata.image,
-      termsAndConditions: item.metadata.properties.termsAndConditions,
-      isAvailable: true, // All minted NFTs are available for claiming
-      tokenId: item.nftId.split(':')[0],
-      serialNumber: parseInt(item.nftId.split(':')[1])
-    }));
-
-    return { coupons };
+    return { campaigns: data.campaigns };
   } catch (error) {
-    console.error('Error fetching coupons:', error);
-    throw new Error('Failed to fetch coupons');
+    console.error('Error fetching campaigns:', error);
+    throw new Error('Failed to fetch campaigns');
   }
 };
 
-export const claimCoupon = async (couponId: string, userWalletAddress: string) => {
+export const claimCoupon = async (nftId: string, userAccountId: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/coupons/claim`, {
       method: 'POST',
@@ -49,8 +33,8 @@ export const claimCoupon = async (couponId: string, userWalletAddress: string) =
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        couponId,
-        userWalletAddress,
+        nftId,
+        userAccountId,
       }),
     });
     const data = await response.json();
@@ -130,5 +114,223 @@ export const getAccountBalance = async (accountId: string): Promise<{ success: b
       balance: 0,
       error: 'Failed to get account balance'
     };
+  }
+};
+
+export const getUserCoupons = async (accountId: string): Promise<{ success: boolean; coupons?: Coupon[]; error?: string }> => {
+  try {
+    if (!accountId) {
+      throw new Error('Account ID is required but was undefined or empty');
+    }
+
+    console.log('Fetching user coupons for account ID:', accountId);
+    const response = await fetch(`${API_BASE_URL}/api/users/${accountId}/coupons`);
+    const data = await response.json();
+    
+    if (data.success) {
+      return {
+        success: true,
+        coupons: data.coupons || []
+      };
+    } else {
+      return {
+        success: false,
+        coupons: [],
+        error: data.error || 'Failed to get user coupons'
+      };
+    }
+  } catch (error) {
+    console.error('Error getting user coupons:', error);
+    return {
+      success: false,
+      coupons: [],
+      error: 'Failed to get user coupons'
+    };
+  }
+};
+
+// Claim a coupon from a campaign
+export const claimCampaignCoupon = async (campaignId: string, userAccountId: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaignId}/claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userAccountId,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to claim coupon');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error claiming coupon:', error);
+    throw error;
+  }
+};
+
+// Get shareable link for a campaign
+export const getCampaignShareLink = async (campaignId: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaignId}/share-link`);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to get share link');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error getting share link:', error);
+    throw error;
+  }
+};
+
+// Generate secure redemption token for a coupon
+export const generateRedemptionToken = async (nftId: string, userAccountId: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/coupons/generate-redemption-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nftId,
+        userAccountId,
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to generate redemption token');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error generating redemption token:', error);
+    throw error;
+  }
+};
+
+// Verify redemption token (for merchants)
+export const verifyRedemptionToken = async (redemptionToken: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/coupons/verify-redemption-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        redemptionToken,
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to verify redemption token');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error verifying redemption token:', error);
+    throw error;
+  }
+};
+
+// User wipes their own coupon (permanent destruction)
+export const burnCoupon = async (nftId: string, userAccountId: string, userPrivateKey: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/coupons/burn`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nftId,
+        userAccountId,
+        userPrivateKey,
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to burn coupon');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error burning coupon:', error);
+    throw error;
+  }
+};
+
+// Get merchant redemption history
+export const getMerchantRedemptionHistory = async (merchantId: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/merchants/${merchantId}/redemptions`);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch redemption history');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching merchant redemption history:', error);
+    throw error;
+  }
+};
+
+// Get user redemption history
+export const getUserRedemptionHistory = async (userAccountId: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/users/${userAccountId}/redemptions`);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch user redemption history');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching user redemption history:', error);
+    throw error;
+  }
+};
+
+// Redeem discount code coupon (burn NFT and get discount code)
+export const redeemDiscountCodeCoupon = async (nftId: string, userAccountId: string, userPrivateKey: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/coupons/redeem-discount-code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nftId,
+        userAccountId,
+        userPrivateKey,
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to redeem discount code coupon');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error redeeming discount code coupon:', error);
+    throw error;
   }
 }; 

@@ -5,7 +5,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
 import { Coupon } from '../types';
 import { fetchAvailableCoupons, claimCoupon } from '../services/api';
-import { walletService } from '../services/wallet';
+import { userWalletService } from '../services/userWallet';
 
 type CouponDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CouponDetail'>;
 type CouponDetailScreenRouteProp = RouteProp<RootStackParamList, 'CouponDetail'>;
@@ -43,23 +43,100 @@ export default function CouponDetailScreen({ navigation, route }: Props) {
     
     try {
       // Get the user's wallet
-      const wallet = await walletService.getWallet();
-      if (!wallet) {
+      const userCredentials = await userWalletService.getUserCredentials();
+      if (!userCredentials?.walletData?.hederaAccountId) {
         Alert.alert('No Wallet', 'Please create a wallet first in the Wallet screen');
         return;
       }
 
-      const result = await claimCoupon(coupon.id, wallet.accountId);
-      
-      if (result.success) {
-        Alert.alert('Success', 'Coupon claimed successfully!');
-        navigation.goBack();
-      } else {
-        Alert.alert('Error', result.error || 'Failed to claim coupon');
-      }
+      // Show confirmation dialog
+      Alert.alert(
+        'Claim Coupon',
+        `Claim "${coupon.name}" to your wallet?\n\nNFT ID: ${coupon.id}\nAccount: ${userCredentials.walletData.hederaAccountId}`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Claim',
+            onPress: async () => {
+              try {
+                const result = await claimCoupon(coupon.id, userCredentials.walletData.hederaAccountId);
+                
+                if (result.success) {
+                  Alert.alert(
+                    'Success!', 
+                    `Coupon claimed successfully!\n\nTransaction ID: ${result.transactionId}\n\nThe NFT has been transferred to your wallet.`,
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => navigation.goBack()
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert('Error', result.error || 'Failed to claim coupon');
+                }
+              } catch (error) {
+                Alert.alert('Error', `Failed to claim coupon: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                console.error('Error claiming coupon:', error);
+              }
+            }
+          }
+        ]
+      );
     } catch (error) {
-      Alert.alert('Error', 'Failed to claim coupon');
-      console.error('Error claiming coupon:', error);
+      Alert.alert('Error', 'Failed to access wallet');
+      console.error('Error accessing wallet:', error);
+    }
+  };
+
+  const handleShowQRCode = async () => {
+    if (!coupon) return;
+    
+    try {
+      // Get the user's wallet to include in QR code
+      const userCredentials = await userWalletService.getUserCredentials();
+      if (!userCredentials?.walletData?.hederaAccountId) {
+        Alert.alert('No Wallet', 'Please create a wallet first to generate redemption QR code');
+        return;
+      }
+
+      // Create QR code data for redemption
+      const qrData = {
+        type: 'coupon_redemption',
+        nftId: coupon.id,
+        userAccountId: userCredentials.walletData.hederaAccountId,
+        couponName: coupon.name,
+        merchant: coupon.merchant,
+        value: coupon.value,
+        generatedAt: new Date().toISOString()
+      };
+
+      const qrDataString = JSON.stringify(qrData);
+
+      // Show QR code data (in a real app, you'd display this as a visual QR code)
+      Alert.alert(
+        'Redemption QR Code',
+        `Show this code to the merchant for redemption:\n\n${qrDataString}`,
+        [
+          {
+            text: 'Copy Code',
+            onPress: () => {
+              // Copy to clipboard if available
+              console.log('QR Code copied:', qrDataString);
+            }
+          },
+          {
+            text: 'Close'
+          }
+        ]
+      );
+      
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate QR code');
+      console.error('Error generating QR code:', error);
     }
   };
 
@@ -118,6 +195,13 @@ export default function CouponDetailScreen({ navigation, route }: Props) {
           <Text style={styles.claimButtonText}>
             {coupon.status === 'active' ? 'Claim Coupon' : 'Already Claimed'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.qrButton} 
+          onPress={handleShowQRCode}
+        >
+          <Text style={styles.qrButtonText}>Generate Redemption QR Code</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -214,5 +298,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  qrButton: {
+    backgroundColor: '#059669',
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#047857',
+  },
+  qrButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

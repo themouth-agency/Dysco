@@ -61,32 +61,19 @@ class MerchantService {
   async getMerchantProfile() {
     try {
       const user = await this.getCurrentUser();
-      if (!user) return null;
+      if (!user) {
+        console.log('❌ No current user found');
+        return null;
+      }
 
-      let profile = await supabaseAuthService.getMerchantProfile(user.id);
+      console.log(`🔍 Looking for merchant profile for user: ${user.id}`);
+      const profile = await supabaseAuthService.getMerchantProfile(user.id);
       
-      // If no profile exists, create one
       if (!profile) {
-        console.log('No merchant profile found, creating one...');
-        const API_BASE_URL = 'http://192.168.0.162:3001';
-        const response = await fetch(`${API_BASE_URL}/api/merchants/create-record`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            email: user.email
-          }),
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          // Try to get the profile again
-          profile = await supabaseAuthService.getMerchantProfile(user.id);
-        } else {
-          console.error('Failed to create merchant record:', result.error);
-        }
+        console.log('❌ No merchant profile found in database');
+        console.log('💡 Profile should have been created during registration');
+      } else {
+        console.log(`✅ Found merchant profile: ${profile.name} (${profile.hedera_account_id})`);
       }
 
       return profile;
@@ -115,12 +102,19 @@ class MerchantService {
       }
 
       // Get merchant profile
-      const profile = await this.getMerchantProfile();
+      let profile = await this.getMerchantProfile();
       if (!profile) {
-        return {
-          success: false,
-          error: 'Merchant profile not found'
-        };
+        // Try to refresh the profile - might have been created recently
+        console.log('🔄 Profile not found, attempting to fetch from backend...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        profile = await this.getMerchantProfile();
+        
+        if (!profile) {
+          return {
+            success: false,
+            error: 'Merchant profile not found. Please log out and log back in.'
+          };
+        }
       }
 
       // Create request object (backend will handle signing)

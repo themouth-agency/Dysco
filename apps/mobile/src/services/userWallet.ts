@@ -32,7 +32,12 @@ export class UserWalletService {
   async isAuthenticated(): Promise<boolean> {
     try {
       const userWallet = await cryptoWalletService.getUserWallet();
-      return !!userWallet;
+      console.log('🔍 isAuthenticated check:', {
+        hasWallet: !!userWallet,
+        hasAccountId: !!userWallet?.userData?.hederaAccountId,
+        accountId: userWallet?.userData?.hederaAccountId
+      });
+      return !!userWallet && !!userWallet.userData.hederaAccountId;
     } catch (error) {
       console.error('Error checking user authentication:', error);
       return false;
@@ -125,6 +130,22 @@ export class UserWalletService {
     } catch (error) {
       console.error('Error clearing user wallet:', error);
       throw new Error('Failed to clear user wallet');
+    }
+  }
+
+  /**
+   * Debug: Get all wallet storage keys for troubleshooting
+   */
+  async debugWalletStorage(): Promise<void> {
+    try {
+      const userWallet = await cryptoWalletService.getUserWallet();
+      console.log('🐛 Debug wallet storage:', {
+        userWallet: userWallet ? 'EXISTS' : 'NULL',
+        userData: userWallet?.userData || 'MISSING',
+        hederaAccountId: userWallet?.userData?.hederaAccountId || 'MISSING'
+      });
+    } catch (error) {
+      console.error('🐛 Debug wallet storage error:', error);
     }
   }
 

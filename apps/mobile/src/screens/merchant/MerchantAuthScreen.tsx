@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MerchantStackParamList } from '../../navigation/MerchantNavigator';
-import { merchantWalletService, MerchantWalletData } from '../../services/merchantWallet';
+import { supabaseAuthService } from '../../services/supabaseAuth';
 
 type MerchantAuthScreenNavigationProp = StackNavigationProp<MerchantStackParamList, 'MerchantAuth'>;
 
@@ -20,51 +20,44 @@ interface Props {
   onAuthSuccess: () => void;
 }
 
-interface RegistrationData {
-  name: string;
-  email: string;
-  businessType: string;
-  fiatPaymentAmount: number;
-}
-
 export default function MerchantAuthScreen({ navigation, onAuthSuccess }: Props) {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   
   // Login form
   const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   
   // Registration form
-  const [regData, setRegData] = useState<RegistrationData>({
-    name: '',
-    email: '',
-    businessType: '',
-    fiatPaymentAmount: 99.99,
-  });
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [businessType, setBusinessType] = useState('');
 
   const handleLogin = async () => {
-    if (!loginEmail.trim()) {
-      Alert.alert('Error', 'Please enter your email address');
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+      Alert.alert('Error', 'Please enter your email and password');
       return;
     }
 
     setIsLoading(true);
     try {
-      // In a real app, this would authenticate with your backend
-      // For now, we'll check if merchant credentials exist locally
-      const isAuthenticated = await merchantWalletService.isAuthenticated();
+      const result = await supabaseAuthService.signIn(loginEmail.trim(), loginPassword);
       
-      if (isAuthenticated) {
-        onAuthSuccess();
-      } else {
+      if (result.success) {
         Alert.alert(
-          'No Account Found', 
-          'No merchant account found locally. Please register first or contact support.',
+          'Welcome Back!',
+          'Successfully logged in to your merchant account.',
           [
-            { text: 'Register', onPress: () => setIsLogin(false) },
-            { text: 'Cancel', style: 'cancel' }
+            {
+              text: 'Continue',
+              onPress: onAuthSuccess
+            }
           ]
         );
+      } else {
+        Alert.alert('Login Failed', result.error || 'Invalid email or password');
       }
     } catch (error) {
       Alert.alert('Error', 'Login failed. Please try again.');
@@ -74,221 +67,257 @@ export default function MerchantAuthScreen({ navigation, onAuthSuccess }: Props)
     }
   };
 
-      const handleRegister = async () => {
-    // Validate form
-    if (!regData.name.trim() || !regData.email.trim() || !regData.businessType.trim()) {
+  const handleRegister = async () => {
+    if (!regEmail.trim() || !regPassword.trim() || !businessName.trim()) {
       Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (regPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     setIsLoading(true);
     try {
-      // Step 1: Generate wallet with mnemonic phrase
-      const { cryptoWalletService } = await import('../../services/cryptoWallet');
-      const { wallet, mnemonic } = await cryptoWalletService.createWallet();
-
-      console.log('✅ Generated merchant wallet with mnemonic on device');
-
-      // Step 2: Register merchant with backend (send PUBLIC key only)
-      const API_BASE_URL = 'http://192.168.0.162:3001';
-      const response = await fetch(`${API_BASE_URL}/api/merchants/register-with-key`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: regData.name,
-          email: regData.email,
-          businessType: regData.businessType,
-          fiatPaymentAmount: regData.fiatPaymentAmount,
-          publicKey: wallet.publicKey // Only send PUBLIC key - never private!
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Registration failed');
-      }
-
-      const merchant = result.merchant;
-
-      // Step 3: Show mnemonic backup screen
-      setIsLoading(false);
+      console.log('📝 Registering merchant with Supabase...');
       
-      // Navigate to mnemonic backup
-      (navigation as any).navigate('MnemonicBackup', {
-        mnemonic,
-        merchantData: {
-          merchantId: merchant.id,
-          name: merchant.name,
-          email: merchant.email,
-          hederaAccountId: merchant.hederaAccountId,
-          hederaPublicKey: wallet.publicKey,
-          nftCollectionId: merchant.nftCollectionId,
-          businessType: merchant.businessType,
-          onboardingStatus: merchant.onboardingStatus,
-          createdAt: new Date().toISOString(),
-        },
-        wallet,
-        onSuccess: onAuthSuccess
+      // Register with Supabase - NO crypto wallet generation
+      const result = await supabaseAuthService.signUp({
+        email: regEmail.trim(),
+        password: regPassword,
+        businessName: businessName.trim(),
+        businessType: businessType.trim() || 'retail'
       });
 
-      return; // Don't continue to success alert
-
+      if (result.success) {
+        // Clear the form fields immediately after successful registration
+        setBusinessName('');
+        setBusinessType('');
+        setRegEmail('');
+        setRegPassword('');
+        setConfirmPassword('');
+        
+        if (result.message) {
+          // Email confirmation required - profile already created
+          Alert.alert(
+            'Registration Successful!',
+            `Your merchant account has been created! ${result.message}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Switch to login mode with clean form
+                  setIsLogin(true);
+                  console.log('✅ Merchant profile created, waiting for email confirmation');
+                }
+              }
+            ]
+          );
+        } else {
+          // Registration complete, account ready
+          Alert.alert(
+            'Registration Successful!',
+            'Your merchant account has been created and is ready to use. You can now start creating digital coupons.',
+            [
+              {
+                text: 'Continue',
+                onPress: onAuthSuccess
+              }
+            ]
+          );
+        }
+      } else {
+        Alert.alert('Registration Failed', result.error || 'Please try again');
+      }
     } catch (error) {
-      Alert.alert('Registration Failed', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       console.error('Registration error:', error);
+      Alert.alert('Registration Failed', 'Please check your connection and try again');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fillDemoData = () => {
-    setRegData({
-      name: 'Central Perk Coffee',
-      email: 'manager@centralperk.com',
-      businessType: 'Coffee Shop',
-      fiatPaymentAmount: 99.99,
-    });
+  const handleRecovery = () => {
+    Alert.alert(
+      'Password Recovery',
+      'Password recovery functionality would be implemented here using Supabase\'s built-in password reset.',
+      [{ text: 'OK' }]
+    );
   };
+
+  const fillDemoData = () => {
+    if (isLogin) {
+      setLoginEmail('demo@merchant.com');
+      setLoginPassword('demo123');
+    } else {
+      setRegEmail('newmerchant@example.com');
+      setRegPassword('secure123');
+      setBusinessName('Central Perk Coffee');
+      setBusinessType('restaurant');
+    }
+  };
+
+  const renderLoginForm = () => (
+    <View style={styles.form}>
+      <Text style={styles.title}>Merchant Login</Text>
+      <Text style={styles.subtitle}>Sign in to your business account</Text>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Email Address</Text>
+        <TextInput
+          style={styles.input}
+          value={loginEmail}
+          onChangeText={setLoginEmail}
+          placeholder="Enter your email"
+          placeholderTextColor="#9ca3af"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Password</Text>
+        <TextInput
+          style={styles.input}
+          value={loginPassword}
+          onChangeText={setLoginPassword}
+          placeholder="Enter your password"
+          placeholderTextColor="#9ca3af"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <TouchableOpacity style={styles.demoButton} onPress={fillDemoData}>
+        <Text style={styles.demoButtonText}>Fill Demo Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.primaryButton, isLoading && styles.disabledButton]}
+        onPress={handleLogin}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.primaryButtonText}>Sign In</Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.linkButton} onPress={handleRecovery}>
+        <Text style={styles.linkText}>Forgot Password?</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.switchButton} onPress={() => setIsLogin(false)}>
+        <Text style={styles.switchText}>
+          Don't have an account? <Text style={styles.switchLink}>Register</Text>
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderRegistrationForm = () => (
+    <View style={styles.form}>
+      <Text style={styles.title}>Create Business Account</Text>
+      <Text style={styles.subtitle}>Start accepting digital coupons</Text>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Business Name *</Text>
+        <TextInput
+          style={styles.input}
+          value={businessName}
+          onChangeText={setBusinessName}
+          placeholder="Enter your business name"
+          placeholderTextColor="#9ca3af"
+          autoCapitalize="words"
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Email Address *</Text>
+        <TextInput
+          style={styles.input}
+          value={regEmail}
+          onChangeText={setRegEmail}
+          placeholder="Enter your email"
+          placeholderTextColor="#9ca3af"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Password *</Text>
+        <TextInput
+          style={styles.input}
+          value={regPassword}
+          onChangeText={setRegPassword}
+          placeholder="Choose a secure password"
+          placeholderTextColor="#9ca3af"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Business Type</Text>
+        <TextInput
+          style={styles.input}
+          value={businessType}
+          onChangeText={setBusinessType}
+          placeholder="e.g., restaurant, retail, services"
+          placeholderTextColor="#9ca3af"
+          autoCapitalize="words"
+        />
+      </View>
+
+      <TouchableOpacity style={styles.demoButton} onPress={fillDemoData}>
+        <Text style={styles.demoButtonText}>Fill Demo Data</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.primaryButton, isLoading && styles.disabledButton]}
+        onPress={handleRegister}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.primaryButtonText}>Create Account</Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.switchButton} onPress={() => setIsLogin(true)}>
+        <Text style={styles.switchText}>
+          Already have an account? <Text style={styles.switchLink}>Sign In</Text>
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.infoBox}>
+        <Text style={styles.infoTitle}>🚀 What happens next?</Text>
+        <Text style={styles.infoText}>
+          • Your business account will be created instantly{'\n'}
+          • A Hedera blockchain account will be set up automatically{'\n'}
+          • You can start creating digital coupons right away{'\n'}
+          • No crypto knowledge required!
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>
-          {isLogin ? 'Merchant Login' : 'Merchant Registration'}
-        </Text>
-        <Text style={styles.subtitle}>
-          {isLogin 
-            ? 'Welcome back to Dysco'
-                  : 'Join Dysco as a merchant'
-          }
-        </Text>
+        <Text style={styles.headerTitle}>Dysco Business</Text>
+        <Text style={styles.headerSubtitle}>Digital Coupon Platform</Text>
       </View>
 
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity
-          style={[styles.toggleButton, isLogin && styles.toggleButtonActive]}
-          onPress={() => setIsLogin(true)}
-        >
-          <Text style={[styles.toggleButtonText, isLogin && styles.toggleButtonTextActive]}>
-            Login
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleButton, !isLogin && styles.toggleButtonActive]}
-          onPress={() => setIsLogin(false)}
-        >
-          <Text style={[styles.toggleButtonText, !isLogin && styles.toggleButtonTextActive]}>
-            Register
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {isLogin ? (
-        // Login Form
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={styles.input}
-              value={loginEmail}
-              onChangeText={setLoginEmail}
-              placeholder="merchant@example.com"
-              placeholderTextColor="#9ca3af"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Login</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.recoveryButton}
-            onPress={() => (navigation as any).navigate('MerchantRecovery')}
-          >
-            <Text style={styles.recoveryButtonText}>
-              Lost access? Recover with phrase
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        // Registration Form
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Business Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={regData.name}
-              onChangeText={(value) => setRegData(prev => ({ ...prev, name: value }))}
-              placeholder="Your Business Name"
-              placeholderTextColor="#9ca3af"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address *</Text>
-            <TextInput
-              style={styles.input}
-              value={regData.email}
-              onChangeText={(value) => setRegData(prev => ({ ...prev, email: value }))}
-              placeholder="business@example.com"
-              placeholderTextColor="#9ca3af"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Business Type *</Text>
-            <TextInput
-              style={styles.input}
-              value={regData.businessType}
-              onChangeText={(value) => setRegData(prev => ({ ...prev, businessType: value }))}
-              placeholder="e.g., Restaurant, Retail, Services"
-              placeholderTextColor="#9ca3af"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Monthly Fee</Text>
-            <Text style={styles.feeText}>${regData.fiatPaymentAmount}/month</Text>
-            <Text style={styles.feeSubtext}>
-              Includes unlimited coupon creation and blockchain fees
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.demoButton}
-            onPress={fillDemoData}
-          >
-            <Text style={styles.demoButtonText}>Fill Demo Data</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
-            onPress={handleRegister}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Create Account & Pay</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      {isLogin ? renderLoginForm() : renderRegistrationForm()}
     </ScrollView>
   );
 }
@@ -300,48 +329,38 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#059669',
-    padding: 20,
+    padding: 30,
     paddingTop: 60,
+    alignItems: 'center',
   },
-  title: {
+  headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 16,
     color: '#d1fae5',
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    margin: 16,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 4,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#059669',
-  },
-  toggleButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  toggleButtonTextActive: {
-    color: '#fff',
-  },
   form: {
-    padding: 16,
+    padding: 20,
   },
-  inputGroup: {
-    marginBottom: 16,
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  inputContainer: {
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
@@ -352,20 +371,10 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#fff',
     borderRadius: 8,
-    padding: 12,
+    padding: 16,
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#d1d5db',
-  },
-  feeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#059669',
-  },
-  feeSubtext: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
   },
   demoButton: {
     backgroundColor: '#6b7280',
@@ -376,7 +385,7 @@ const styles = StyleSheet.create({
   },
   demoButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   primaryButton: {
@@ -384,8 +393,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
+    marginBottom: 16,
   },
-  primaryButtonDisabled: {
+  disabledButton: {
     backgroundColor: '#9ca3af',
   },
   primaryButtonText: {
@@ -393,15 +403,43 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  recoveryButton: {
-    marginTop: 16,
-    paddingVertical: 12,
+  linkButton: {
     alignItems: 'center',
+    marginBottom: 16,
   },
-  recoveryButtonText: {
+  linkText: {
     color: '#059669',
-    fontSize: 14,
-    fontWeight: '500',
-    textDecorationLine: 'underline',
+    fontSize: 16,
   },
-}); 
+  switchButton: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  switchText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  switchLink: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  infoBox: {
+    backgroundColor: '#ecfdf5',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#059669',
+    marginTop: 16,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#047857',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#047857',
+    lineHeight: 20,
+  },
+});

@@ -318,10 +318,15 @@ class CryptoWalletService {
    */
   getTestWords(mnemonic: string): { positions: number[]; words: string[] } {
     const words = mnemonic.split(' ');
-    const positions = [2, 5, 8]; // Test 3rd, 6th, and 9th words (0-indexed: 2, 5, 8)
+    
+    // Randomly select 3 positions to test (0-indexed)
+    const allPositions = Array.from({ length: words.length }, (_, i) => i);
+    const shuffled = allPositions.sort(() => Math.random() - 0.5);
+    const selectedPositions = shuffled.slice(0, 3).sort((a, b) => a - b);
+    
     return {
-      positions: positions.map(p => p + 1), // Convert to 1-indexed for display
-      words: positions.map(p => words[p])
+      positions: selectedPositions, // Keep 0-indexed for array access
+      words: selectedPositions.map(p => words[p])
     };
   }
 

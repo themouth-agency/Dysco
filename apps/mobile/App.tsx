@@ -21,6 +21,18 @@ export type RootStackParamList = {
   CouponDetail: { couponId: string };
   MyCoupons: undefined;
   Wallet: undefined;
+  ClaimCoupon: { campaignId: string };
+  UserRedemptionHistory: undefined;
+  MnemonicBackup: {
+    mnemonic: string;
+    privateKey: string;
+    publicKey: string;
+  };
+  MnemonicVerification: {
+    mnemonic: string;
+    privateKey: string;
+    publicKey: string;
+  };
 };
 
 function AppContent() {
@@ -41,8 +53,17 @@ function AppContent() {
     );
   }
 
+  const linking = {
+    prefixes: ['dysco://', 'exp://192.168.0.49:8081/--/'],
+    config: {
+      screens: {
+        ClaimCoupon: 'claim/:campaignId',
+      },
+    },
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       {mode === 'user' ? (
         <UserNavigator onLogout={handleLogout} />
       ) : (

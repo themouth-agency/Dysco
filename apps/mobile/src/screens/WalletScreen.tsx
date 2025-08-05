@@ -7,38 +7,41 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  TextInput,
+  Modal,
 } from 'react-native';
-import { walletService, WalletData } from '../services/wallet';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../App';
+import { userWalletService, UserCredentials } from '../services/userWallet';
+import { cryptoWalletService } from '../services/cryptoWallet';
 
-export default function WalletScreen() {
-  const [wallet, setWallet] = useState<WalletData | null>(null);
+type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Wallet'>;
+
+interface Props {
+  navigation: WalletScreenNavigationProp;
+}
+
+export default function WalletScreen({ navigation }: Props) {
+  const [userCredentials, setUserCredentials] = useState<UserCredentials | null>(null);
   const [loading, setLoading] = useState(true);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showRecoverModal, setShowRecoverModal] = useState(false);
+  const [recoveryMnemonic, setRecoveryMnemonic] = useState('');
+  const [isRecovering, setIsRecovering] = useState(false);
 
   useEffect(() => {
-    loadWalletData();
+    loadUserWallet();
   }, []);
 
-  const loadWalletData = async () => {
+  const loadUserWallet = async () => {
     try {
       setLoading(true);
       
-      // Check biometric availability
-      const bioAvailable = await walletService.isBiometricAvailable();
-      setBiometricAvailable(bioAvailable);
-      
-      if (bioAvailable) {
-        const bioEnabled = await walletService.isBiometricEnabled();
-        setBiometricEnabled(bioEnabled);
-      }
-
-      // Get wallet data
-      const walletData = await walletService.getWallet();
-      setWallet(walletData);
+      // Get user wallet credentials
+      const credentials = await userWalletService.getUserCredentials();
+      setUserCredentials(credentials);
     } catch (error) {
-      console.error('Error loading wallet data:', error);
+      console.error('Error loading user wallet:', error);
       Alert.alert('Error', 'Failed to load wallet data');
     } finally {
       setLoading(false);
@@ -48,9 +51,19 @@ export default function WalletScreen() {
   const handleCreateWallet = async () => {
     try {
       setLoading(true);
-      const newWallet = await walletService.generateWallet();
-      setWallet(newWallet);
-      Alert.alert('Success', 'Wallet created successfully!');
+      console.log('🔐 Generating new user wallet with mnemonic...');
+      
+      // Generate new wallet with mnemonic
+      const { mnemonic, privateKey, publicKey } = await userWalletService.generateUserWallet();
+      
+      console.log('✅ User wallet generated, navigating to backup screen');
+      
+      // Navigate to mnemonic backup screen
+      navigation.navigate('MnemonicBackup', {
+        mnemonic,
+        privateKey,
+        publicKey,
+      });
     } catch (error) {
       console.error('Error creating wallet:', error);
       Alert.alert('Error', 'Failed to create wallet');
@@ -59,67 +72,108 @@ export default function WalletScreen() {
     }
   };
 
+  const handleRecoverWallet = async () => {
+    if (!recoveryMnemonic.trim()) {
+      Alert.alert('Error', 'Please enter your recovery phrase');
+      return;
+    }
+
+    setIsRecovering(true);
+    try {
+      // Validate mnemonic
+      const isValid = cryptoWalletService.validateMnemonic(recoveryMnemonic.trim());
+      if (!isValid) {
+        Alert.alert('Invalid Recovery Phrase', 'Please check your recovery phrase and try again.');
+        return;
+      }
+
+      console.log('🔐 Recovering wallet from mnemonic...');
+      
+      // Recover wallet keys from mnemonic
+      const walletData = await cryptoWalletService.recoverUserWallet(recoveryMnemonic.trim());
+      if (!walletData) {
+        throw new Error('Failed to recover wallet from mnemonic');
+      }
+
+      // Create Hedera account on backend
+      const response = await fetch('http://192.168.0.49:3001/api/users/create-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          publicKey: walletData.publicKey,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create Hedera account');
+      }
+
+      console.log('✅ Hedera account created:', data.accountId);
+
+      // Store recovered wallet
+      await userWalletService.storeUserCredentials(
+        recoveryMnemonic.trim(),
+        walletData.privateKey,
+        walletData.publicKey,
+        {
+          hederaAccountId: data.accountId,
+          balance: 1, // Initial balance
+          createdAt: new Date().toISOString(),
+        }
+      );
+
+      setShowRecoverModal(false);
+      setRecoveryMnemonic('');
+      await loadUserWallet();
+
+      Alert.alert(
+        'Wallet Recovered! 🎉',
+        `Your wallet has been successfully recovered!\n\nAccount ID: ${data.accountId}`
+      );
+    } catch (error) {
+      console.error('Error recovering wallet:', error);
+      Alert.alert('Recovery Failed', 'Failed to recover wallet. Please check your recovery phrase and try again.');
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
   const handleRefreshBalance = async () => {
     try {
       setRefreshing(true);
-      const newBalance = await walletService.updateBalance();
-      if (wallet) {
-        setWallet({ ...wallet, balance: newBalance });
-      }
+      await loadUserWallet(); // Reload wallet data
     } catch (error) {
-      console.error('Error refreshing balance:', error);
-      Alert.alert('Error', 'Failed to refresh balance');
+      console.error('Error refreshing wallet:', error);
+      Alert.alert('Error', 'Failed to refresh wallet data');
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleToggleBiometric = async () => {
-    try {
-      const newEnabled = !biometricEnabled;
-      await walletService.setBiometricEnabled(newEnabled);
-      setBiometricEnabled(newEnabled);
-      Alert.alert('Success', `Biometric authentication ${newEnabled ? 'enabled' : 'disabled'}`);
-    } catch (error) {
-      console.error('Error toggling biometric:', error);
-      Alert.alert('Error', 'Failed to update biometric settings');
-    }
-  };
-
-  const handleTestBiometric = async () => {
-    try {
-      const success = await walletService.authenticateWithBiometrics();
-      if (success) {
-        Alert.alert('Success', 'Biometric authentication successful!');
-      } else {
-        Alert.alert('Failed', 'Biometric authentication failed');
-      }
-    } catch (error) {
-      console.error('Error testing biometric:', error);
-      Alert.alert('Error', 'Failed to test biometric authentication');
-    }
-  };
-
-  const handleDeleteWallet = () => {
+  const handleLogout = () => {
     Alert.alert(
-      'Delete Wallet',
-      'Are you sure you want to delete your wallet? This action cannot be undone.',
+      'Logout',
+      'Are you sure you want to logout? Make sure you have your recovery phrase saved.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             try {
-              await walletService.deleteWallet();
-              setWallet(null);
-              Alert.alert('Success', 'Wallet deleted successfully');
+              await userWalletService.clearUserWallet();
+              setUserCredentials(null);
+              Alert.alert('Logged Out', 'You have been logged out successfully');
             } catch (error) {
-              console.error('Error deleting wallet:', error);
-              Alert.alert('Error', 'Failed to delete wallet');
+              console.error('Error logging out:', error);
+              Alert.alert('Error', 'Failed to logout');
             }
-          },
-        },
+          }
+        }
       ]
     );
   };
@@ -135,14 +189,19 @@ export default function WalletScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      {!wallet ? (
+      {!userCredentials ? (
         <View style={styles.noWalletContainer}>
-          <Text style={styles.noWalletTitle}>No Wallet Found</Text>
+          <Text style={styles.noWalletTitle}>🔐 Welcome to Dysco</Text>
           <Text style={styles.noWalletSubtitle}>
-            Create a new Hedera wallet to start using Dysco
+            Create a secure Hedera wallet with recovery phrase to start collecting digital coupons
           </Text>
+          
           <TouchableOpacity style={styles.createButton} onPress={handleCreateWallet}>
-            <Text style={styles.createButtonText}>Create Wallet</Text>
+            <Text style={styles.createButtonText}>Create New Wallet</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.recoverButton} onPress={() => setShowRecoverModal(true)}>
+            <Text style={styles.recoverButtonText}>Recover Existing Wallet</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -160,63 +219,87 @@ export default function WalletScreen() {
           {/* Account Info */}
           <View style={styles.accountCard}>
             <Text style={styles.accountLabel}>Account ID</Text>
-            <Text style={styles.accountValue}>{wallet.accountId}</Text>
+            <Text style={styles.accountValue}>{userCredentials?.walletData?.hederaAccountId || 'Loading...'}</Text>
             
             <Text style={styles.balanceLabel}>Balance</Text>
-            <Text style={styles.balanceValue}>{wallet.balance} HBAR</Text>
+            <Text style={styles.balanceValue}>{userCredentials?.walletData?.balance || 0} HBAR</Text>
             
             <Text style={styles.createdLabel}>Created</Text>
             <Text style={styles.createdValue}>
-              {new Date(wallet.createdAt).toLocaleDateString()}
+              {userCredentials?.walletData?.createdAt ? new Date(userCredentials.walletData.createdAt).toLocaleDateString() : 'Unknown'}
             </Text>
           </View>
 
-          {/* Biometric Settings */}
-          {biometricAvailable && (
-            <View style={styles.settingsCard}>
-              <Text style={styles.settingsTitle}>Security</Text>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Biometric Authentication</Text>
-                <TouchableOpacity
-                  style={[styles.toggleButton, biometricEnabled && styles.toggleButtonActive]}
-                  onPress={handleToggleBiometric}
-                >
-                  <Text style={styles.toggleButtonText}>
-                    {biometricEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity style={styles.testButton} onPress={handleTestBiometric}>
-                <Text style={styles.testButtonText}>Test Biometric</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          {/* Security Info */}
+          <View style={styles.securityCard}>
+            <Text style={styles.securityTitle}>🔒 Security</Text>
+            <Text style={styles.securityText}>
+              Your wallet is secured with a 12-word recovery phrase. Make sure you have it stored safely.
+            </Text>
+          </View>
 
           {/* Actions */}
           <View style={styles.actionsCard}>
-            <Text style={styles.actionsTitle}>Actions</Text>
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Export Wallet (QR)</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Import Wallet</Text>
-            </TouchableOpacity>
-            
             <TouchableOpacity 
-              style={[styles.actionButton, styles.deleteButton]} 
-              onPress={handleDeleteWallet}
+              style={styles.historyButton} 
+              onPress={() => navigation.navigate('UserRedemptionHistory')}
             >
-              <Text style={[styles.actionButtonText, styles.deleteButtonText]}>
-                Delete Wallet
-              </Text>
+              <Text style={styles.historyButtonText}>📊 View Redemption History</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutButtonText}>Logout</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
+
+      {/* Recovery Modal */}
+      <Modal visible={showRecoverModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Recover Wallet</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setShowRecoverModal(false);
+                setRecoveryMnemonic('');
+              }}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <Text style={styles.modalSubtitle}>
+              Enter your 12-word recovery phrase to restore your wallet
+            </Text>
+            
+            <TextInput
+              style={styles.mnemonicInput}
+              placeholder="Enter your 12-word recovery phrase..."
+              value={recoveryMnemonic}
+              onChangeText={setRecoveryMnemonic}
+              multiline
+              numberOfLines={4}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <TouchableOpacity
+              style={[styles.recoverSubmitButton, isRecovering && styles.buttonDisabled]}
+              onPress={handleRecoverWallet}
+              disabled={isRecovering}
+            >
+              {isRecovering ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.recoverSubmitButtonText}>Recover Wallet</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -431,5 +514,132 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#dc2626',
+  },
+  recoverButton: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: '#2563eb',
+  },
+  recoverButtonText: {
+    color: '#2563eb',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  securityCard: {
+    backgroundColor: '#fff',
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  securityTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  securityText: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  historyButton: {
+    backgroundColor: '#2563eb',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  historyButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  logoutButton: {
+    backgroundColor: '#ef4444',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#64748b',
+    fontWeight: 'bold',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#64748b',
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  mnemonicInput: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#1e293b',
+    textAlignVertical: 'top',
+    minHeight: 120,
+    marginBottom: 20,
+  },
+  recoverSubmitButton: {
+    backgroundColor: '#2563eb',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  recoverSubmitButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 }); 

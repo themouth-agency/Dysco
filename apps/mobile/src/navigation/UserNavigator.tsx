@@ -8,6 +8,10 @@ import HomeScreen from '../screens/HomeScreen';
 import CouponDetailScreen from '../screens/CouponDetailScreen';
 import MyCouponsScreen from '../screens/MyCouponsScreen';
 import WalletScreen from '../screens/WalletScreen';
+import ClaimCouponScreen from '../screens/ClaimCouponScreen';
+import UserRedemptionHistoryScreen from '../screens/UserRedemptionHistoryScreen';
+import MnemonicBackupScreen from '../screens/MnemonicBackupScreen';
+import MnemonicVerificationScreen from '../screens/MnemonicVerificationScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -57,6 +61,34 @@ export const UserNavigator: React.FC<UserNavigatorProps> = ({ onLogout }) => {
               <Text style={{ color: '#fff', fontSize: 16 }}>Switch Role</Text>
             </TouchableOpacity>
           ) : null
+        }}
+      />
+      <Stack.Screen
+        name="ClaimCoupon"
+        component={ClaimCouponScreen}
+        options={{ title: 'Claim Coupon' }}
+      />
+      <Stack.Screen
+        name="UserRedemptionHistory"
+        component={UserRedemptionHistoryScreen}
+        options={{ title: 'Redemption History' }}
+      />
+      <Stack.Screen
+        name="MnemonicBackup"
+        component={MnemonicBackupScreen}
+        options={{ 
+          title: 'Backup Wallet',
+          headerLeft: () => null, // Prevent going back
+          gestureEnabled: false
+        }}
+      />
+      <Stack.Screen
+        name="MnemonicVerification"
+        component={MnemonicVerificationScreen}
+        options={{ 
+          title: 'Verify Recovery Phrase',
+          headerLeft: () => null, // Prevent going back during verification
+          gestureEnabled: false
         }}
       />
     </Stack.Navigator>

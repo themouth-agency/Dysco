@@ -45,6 +45,14 @@ export default function MerchantDashboardScreen({ navigation }: Props) {
 
         <TouchableOpacity
           style={styles.actionButton}
+          onPress={() => navigation.navigate('CampaignDashboard')}
+        >
+          <Text style={styles.actionButtonText}>Manage Campaigns</Text>
+          <Text style={styles.actionButtonSubtext}>Organize coupons by campaigns</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
           onPress={() => navigation.navigate('QRScanner')}
         >
           <Text style={styles.actionButtonText}>Scan Coupon</Text>

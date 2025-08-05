@@ -11,6 +11,11 @@ export interface Coupon {
   isAvailable: boolean;
   tokenId: string;
   serialNumber: number;
+  // Campaign information
+  campaignType?: 'qr_redeem' | 'discount_code';
+  discountType?: 'percentage' | 'fixed_amount' | 'free_item' | 'other';
+  discountCode?: string;
+  redemptionType?: string;
   // Legacy fields for compatibility
   discountPercent?: number;
   merchantId?: string;
