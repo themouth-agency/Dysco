@@ -3,10 +3,11 @@ import { TouchableOpacity, Text } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 
-// User Mode Screens
-import HomeScreen from '../screens/HomeScreen';
+// Tab Navigator
+import UserTabNavigator from './UserTabNavigator';
+
+// Modal/Overlay Screens
 import CouponDetailScreen from '../screens/CouponDetailScreen';
-import MyCouponsScreen from '../screens/MyCouponsScreen';
 import WalletScreen from '../screens/WalletScreen';
 import ClaimCouponScreen from '../screens/ClaimCouponScreen';
 import UserRedemptionHistoryScreen from '../screens/UserRedemptionHistoryScreen';
@@ -22,37 +23,36 @@ interface UserNavigatorProps {
 export const UserNavigator: React.FC<UserNavigatorProps> = ({ onLogout }) => {
   return (
     <Stack.Navigator
-      initialRouteName="Home"
+      initialRouteName="MainTabs"
       screenOptions={{
-        headerStyle: {
-          backgroundColor: '#2563eb', // Blue theme for User mode
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerShown: false,
       }}
     >
+      {/* Main tab navigation */}
       <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ title: 'Dysco - User' }}
+        name="MainTabs"
+        component={UserTabNavigator}
       />
+      
+      {/* Modal/overlay screens */}
       <Stack.Screen
         name="CouponDetail"
         component={CouponDetailScreen}
-        options={{ title: 'Coupon Details' }}
-      />
-      <Stack.Screen
-        name="MyCoupons"
-        component={MyCouponsScreen}
-        options={{ title: 'My Coupons' }}
+        options={{ 
+          title: 'Coupon Details',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
+        }}
       />
       <Stack.Screen
         name="Wallet"
         component={WalletScreen}
         options={{ 
           title: 'Wallet',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
           headerRight: () => onLogout ? (
             <TouchableOpacity 
               onPress={onLogout}
@@ -66,18 +66,31 @@ export const UserNavigator: React.FC<UserNavigatorProps> = ({ onLogout }) => {
       <Stack.Screen
         name="ClaimCoupon"
         component={ClaimCouponScreen}
-        options={{ title: 'Claim Coupon' }}
+        options={{ 
+          title: 'Claim Coupon',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
+        }}
       />
       <Stack.Screen
         name="UserRedemptionHistory"
         component={UserRedemptionHistoryScreen}
-        options={{ title: 'Redemption History' }}
+        options={{ 
+          title: 'Redemption History',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
+        }}
       />
       <Stack.Screen
         name="MnemonicBackup"
         component={MnemonicBackupScreen}
         options={{ 
           title: 'Backup Wallet',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
           headerLeft: () => null, // Prevent going back
           gestureEnabled: false
         }}
@@ -87,6 +100,9 @@ export const UserNavigator: React.FC<UserNavigatorProps> = ({ onLogout }) => {
         component={MnemonicVerificationScreen}
         options={{ 
           title: 'Verify Recovery Phrase',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
           headerLeft: () => null, // Prevent going back during verification
           gestureEnabled: false
         }}

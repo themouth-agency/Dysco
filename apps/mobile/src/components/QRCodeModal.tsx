@@ -25,6 +25,13 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   couponName,
   discountInfo,
 }) => {
+  console.log('🎫 QRCodeModal props:', { visible, redemptionToken: redemptionToken?.length || 0, couponName });
+  
+  // Don't render if token is empty
+  if (!redemptionToken || redemptionToken.trim() === '') {
+    console.log('❌ No redemption token provided to QRCodeModal');
+    return null;
+  }
   return (
     <Modal
       visible={visible}

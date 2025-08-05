@@ -233,7 +233,7 @@ export default function ClaimCouponScreen({ navigation, route }: Props) {
 
               <TouchableOpacity
                 style={styles.secondaryButton}
-                onPress={() => navigation.navigate('Home')}
+                onPress={() => navigation.navigate('MainTabs')}
               >
                 <Text style={styles.secondaryButtonText}>Back to Home</Text>
               </TouchableOpacity>

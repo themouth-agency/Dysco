@@ -195,6 +195,7 @@ export const getCampaignShareLink = async (campaignId: string) => {
 // Generate secure redemption token for a coupon
 export const generateRedemptionToken = async (nftId: string, userAccountId: string) => {
   try {
+    console.log('🌐 API: Calling generate-redemption-token with:', { nftId, userAccountId });
     const response = await fetch(`${API_BASE_URL}/api/coupons/generate-redemption-token`, {
       method: 'POST',
       headers: {
@@ -207,15 +208,28 @@ export const generateRedemptionToken = async (nftId: string, userAccountId: stri
     });
 
     const data = await response.json();
+    console.log('🌐 API: Raw response from backend:', data);
     
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to generate redemption token');
+      console.log('❌ API: Response not ok:', response.status, data);
+      return {
+        success: false,
+        error: data.error || 'Failed to generate redemption token'
+      };
     }
     
-    return data;
+    // Backend returns { redemptionToken: "..." }
+    return {
+      success: true,
+      token: data.redemptionToken,
+      ...data
+    };
   } catch (error) {
-    console.error('Error generating redemption token:', error);
-    throw error;
+    console.error('❌ API: Error generating redemption token:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to generate redemption token'
+    };
   }
 };
 

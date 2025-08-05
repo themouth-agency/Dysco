@@ -5,36 +5,37 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
+  SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
+  Alert,
+  StatusBar,
 } from 'react-native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../../App';
-import { Coupon } from '../types';
-import { getUserCoupons, generateRedemptionToken, burnCoupon, redeemDiscountCodeCoupon } from '../services/api';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+
+// Services
 import { userWalletService } from '../services/userWallet';
+
+// Components
 import { QRCodeModal } from '../components/QRCodeModal';
 
-type MyCouponsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MyCoupons'>;
+// API
+import * as api from '../services/api';
 
-interface Props {
-  navigation: MyCouponsScreenNavigationProp;
-}
+// Types
+import { Coupon } from '../types';
 
-interface GroupedCoupons {
-  merchant: string;
-  coupons: Coupon[];
-  count: number;
-}
+type FilterType = 'all' | 'available' | 'expired';
 
-export default function MyCouponsScreen({ navigation }: Props) {
+export default function MyCouponsScreen() {
+  const navigation = useNavigation();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [groupedCoupons, setGroupedCoupons] = useState<GroupedCoupons[]>([]);
+  const [filteredCoupons, setFilteredCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasWallet, setHasWallet] = useState<boolean | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [balance, setBalance] = useState<number>(0);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   
   // QR Code Modal state
   const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -42,369 +43,379 @@ export default function MyCouponsScreen({ navigation }: Props) {
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
 
   useEffect(() => {
-    checkWalletAndLoadCoupons();
+    checkWalletAndLoadData();
   }, []);
 
-  const checkWalletAndLoadCoupons = async () => {
+  useEffect(() => {
+    filterCoupons();
+  }, [coupons, activeFilter]);
+
+  const checkWalletAndLoadData = async () => {
     try {
       setLoading(true);
       
-      // Check if user has a wallet
+      // Check if user has wallet
       const userCredentials = await userWalletService.getUserCredentials();
-      const isAuthenticated = !!userCredentials?.walletData?.hederaAccountId;
-      setHasWallet(isAuthenticated);
-      
-      if (isAuthenticated && userCredentials?.walletData?.hederaAccountId) {
-        // Load user's coupons
-        await loadUserCoupons(userCredentials.walletData.hederaAccountId);
+      console.log('🐛 Debug wallet storage:', {
+        hederaAccountId: userCredentials?.walletData?.hederaAccountId,
+        walletData: userCredentials?.walletData,
+        userWallet: userCredentials ? 'EXISTS' : 'NOT_FOUND'
+      });
+
+      if (!userCredentials?.walletData?.hederaAccountId) {
+        setHasWallet(false);
+        setLoading(false);
+        return;
       }
+
+      setHasWallet(true);
+      
+      // Load balance
+      const balanceData = await api.getAccountBalance(userCredentials.walletData.hederaAccountId);
+      if (balanceData.success) {
+        setBalance(balanceData.balance);
+      }
+      
+      // Load coupons
+      await loadCoupons();
     } catch (error) {
-      console.error('Error checking wallet status:', error);
+      console.error('Error checking wallet and loading data:', error);
       setHasWallet(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const groupCouponsByMerchant = (coupons: Coupon[]): GroupedCoupons[] => {
-    const groups: { [merchant: string]: Coupon[] } = {};
-    
-    coupons.forEach(coupon => {
-      const merchant = coupon.merchant || 'Unknown Merchant';
-      if (!groups[merchant]) {
-        groups[merchant] = [];
-      }
-      groups[merchant].push(coupon);
-    });
-    
-    const groupedResults = Object.entries(groups).map(([merchant, coupons]) => ({
-      merchant,
-      coupons,
-      count: coupons.length
-    }));
-    
-    // Auto-expand all groups by default for better UX
-    const newExpandedGroups = new Set(groupedResults.map(group => group.merchant));
-    setExpandedGroups(newExpandedGroups);
-    
-    return groupedResults;
-  };
-
-  const loadUserCoupons = async (accountId: string) => {
-    try {
-      const data = await getUserCoupons(accountId);
-      if (data.success) {
-        const coupons = data.coupons || [];
-        setCoupons(coupons);
-        setGroupedCoupons(groupCouponsByMerchant(coupons));
-      } else {
-        console.error('Failed to load user coupons:', data.error);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load your coupons');
-      console.error('Error loading user coupons:', error);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    const userCredentials = await userWalletService.getUserCredentials();
-    if (userCredentials?.walletData?.hederaAccountId) {
-      await loadUserCoupons(userCredentials.walletData.hederaAccountId);
-    }
-    setRefreshing(false);
-  };
-
-  const toggleGroupExpansion = (merchant: string) => {
-    setExpandedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(merchant)) {
-        newSet.delete(merchant);
-      } else {
-        newSet.add(merchant);
-      }
-      return newSet;
-    });
-  };
-
-  const formatDiscountInfo = (coupon: Coupon) => {
-    if (coupon.discountType === 'percentage') {
-      return `${coupon.value}% OFF`;
-    } else if (coupon.discountType === 'fixed_amount') {
-      return `$${coupon.value} OFF`;
-    } else if (coupon.discountType === 'free_item') {
-      return 'FREE';
-    } else {
-      return `${coupon.value}`;
-    }
-  };
-
-  const handleRedeemCoupon = async (coupon: Coupon) => {
+  const loadCoupons = async () => {
     try {
       const userCredentials = await userWalletService.getUserCredentials();
-      if (!userCredentials?.walletData?.hederaAccountId || !userCredentials?.privateKey) {
-        Alert.alert('Error', 'Wallet credentials not found');
+      if (!userCredentials?.walletData?.hederaAccountId) {
         return;
       }
 
-      // Check campaign type to determine redemption flow
-      if (coupon.campaignType === 'discount_code') {
-        // Discount code redemption: burn NFT and reveal code
+      console.log('Fetching user coupons for account ID:', userCredentials.walletData.hederaAccountId);
+      
+      const userCouponsResponse = await api.getUserCoupons(userCredentials.walletData.hederaAccountId);
+      setCoupons(userCouponsResponse.coupons || []);
+    } catch (error) {
+      console.error('Error loading coupons:', error);
+      Alert.alert('Error', 'Failed to load coupons');
+    }
+  };
+
+  const filterCoupons = () => {
+    if (!coupons) return;
+
+    let filtered: Coupon[] = [];
+    const now = new Date();
+
+    switch (activeFilter) {
+      case 'all':
+        filtered = coupons;
+        break;
+      case 'available':
+        filtered = coupons.filter(coupon => {
+          if (!coupon.validUntil) return true;
+          const expiryDate = new Date(coupon.validUntil);
+          return expiryDate > now;
+        });
+        break;
+      case 'expired':
+        filtered = coupons.filter(coupon => {
+          if (!coupon.validUntil) return false;
+          const expiryDate = new Date(coupon.validUntil);
+          return expiryDate <= now;
+        });
+        break;
+    }
+
+    setFilteredCoupons(filtered);
+  };
+
+  const handleRedeemPress = async (coupon: Coupon) => {
+    console.log('🎫 Redeem button pressed for coupon:', coupon.name, coupon.id);
+    setSelectedCoupon(coupon);
+    try {
+      const userCredentials = await userWalletService.getUserCredentials();
+      if (!userCredentials?.walletData?.hederaAccountId) {
+        Alert.alert('Wallet Required', 'Please create a wallet first to redeem coupons.');
+        navigation.navigate('Wallet' as never);
+        return;
+      }
+      
+      // Default to QR code if redemption type is not set
+      const redemptionType = coupon.redemptionType || 'qr_code';
+      
+      if (redemptionType === 'qr_code' || redemptionType === 'qr_redeem') {
+        console.log('🚀 Generating QR redemption token...');
+        const response = await api.generateRedemptionToken(coupon.id, userCredentials.walletData.hederaAccountId);
+        if (response.success && response.token) {
+          console.log('✅ QR token generated successfully:', response.token?.substring(0, 20) + '...');
+          setRedemptionToken(response.token);
+          setQrModalVisible(true);
+        } else {
+          console.log('❌ Failed to generate QR token:', response.error || 'No token received');
+          Alert.alert('Error', response.error || 'Failed to generate redemption token.');
+        }
+      } else if (redemptionType === 'discount_code') {
         Alert.alert(
-          '💳 Redeem Discount Code',
-          `This will permanently burn your NFT and reveal the discount code for "${coupon.name}". This action cannot be undone.`,
+          'Redeem Discount Code',
+          `Are you sure you want to redeem this coupon for a discount code? This will burn the NFT.`, 
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Redeem Code', 
-              style: 'destructive',
+            {
+              text: 'Redeem',
               onPress: async () => {
                 try {
-                  console.log(`💳 Redeeming discount code for coupon ${coupon.id}`);
-                  
-                  const result = await redeemDiscountCodeCoupon(
-                    coupon.id,
-                    userCredentials.walletData.hederaAccountId,
-                    userCredentials.privateKey
-                  );
-
-                  Alert.alert(
-                    '🎉 Discount Code Redeemed!',
-                    `Your discount code: ${result.discountCode}\n\nCampaign: ${result.campaignName}\nDiscount: ${result.discountValue}${result.discountType === 'percentage' ? '%' : ''} off\n\nUse this code when shopping online!`,
-                    [
-                      { 
-                        text: 'Copy Code', 
-                        onPress: () => {
-                          // TODO: Add clipboard functionality
-                          console.log('Copying code to clipboard:', result.discountCode);
-                        }
-                      },
-                      { 
-                        text: 'OK', 
-                        onPress: () => onRefresh() 
-                      }
-                    ]
-                  );
+                  const redeemResponse = await api.redeemDiscountCodeCoupon(coupon.id, userCredentials.walletData.hederaAccountId);
+                  if (redeemResponse.success) {
+                    Alert.alert('Success!', `Your discount code is: ${redeemResponse.discountCode}. You can copy it from the redemption history.`);
+                    onRefresh(); // Refresh coupons after redemption
+                  } else {
+                    Alert.alert('Redemption Failed', redeemResponse.error || 'Failed to redeem coupon for discount code.');
+                  }
                 } catch (error) {
                   console.error('Error redeeming discount code:', error);
-                  Alert.alert('Error', 'Failed to redeem discount code. Please try again.');
+                  Alert.alert('Error', 'Failed to redeem discount code.');
                 }
               }
             }
           ]
         );
-      } else {
-        // QR redemption: generate secure token for merchant scanning
-        const tokenData = await generateRedemptionToken(
-          coupon.id, 
-          userCredentials.walletData.hederaAccountId
-        );
-
-        // Show QR code modal for merchant to scan
-        setSelectedCoupon(coupon);
-        setRedemptionToken(tokenData.redemptionToken);
-        setQrModalVisible(true);
       }
     } catch (error) {
-      console.error('Error in redemption flow:', error);
-      Alert.alert('Error', 'Failed to process redemption. Please try again.');
+      console.error('Error handling redeem press:', error);
+      Alert.alert('Error', 'Failed to initiate redemption process.');
     }
   };
 
-  const handleBurnCoupon = async (coupon: Coupon) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
     try {
-      // Show confirmation dialog with strong warning
-      Alert.alert(
-        '🔥 Burn Coupon - PERMANENT',
-        `Are you sure you want to permanently destroy this coupon?\n\n"${coupon.name}"\n\n⚠️ This action CANNOT be undone!\n⚠️ The coupon will be destroyed forever!\n⚠️ You will NOT be able to use or redeem it!`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'BURN FOREVER',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const userCredentials = await userWalletService.getUserCredentials();
-                if (!userCredentials?.walletData?.hederaAccountId || !userCredentials?.privateKey) {
-                  Alert.alert('Error', 'Wallet credentials not found');
-                  return;
-                }
-
-                console.log(`🔥 Destroying coupon ${coupon.id} for user ${userCredentials.walletData.hederaAccountId}`);
-
-                // Call burn API
-                const result = await burnCoupon(
-                  coupon.id,
-                  userCredentials.walletData.hederaAccountId,
-                  userCredentials.privateKey
-                );
-
-                console.log('✅ Coupon destroyed successfully:', result);
-
-                Alert.alert(
-                  '🔥 Coupon Destroyed',
-                  `"${coupon.name}" has been permanently destroyed.`,
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        // Refresh the coupons list
-                        onRefresh();
-                      }
-                    }
-                  ]
-                );
-
-              } catch (wipeError) {
-                console.error('Error wiping coupon:', wipeError);
-                Alert.alert('Error', 'Failed to destroy coupon. Please try again.');
-              }
-            }
-          }
-        ]
-      );
-
+      // Only refresh data without showing loading state to prevent flashing
+      const userCredentials = await userWalletService.getUserCredentials();
+      if (userCredentials?.walletData?.hederaAccountId) {
+        // Load balance
+        const balanceData = await api.getAccountBalance(userCredentials.walletData.hederaAccountId);
+        if (balanceData.success) {
+          setBalance(balanceData.balance);
+        }
+        
+        // Load coupons
+        await loadCoupons();
+      }
     } catch (error) {
-      console.error('Error preparing to destroy coupon:', error);
-      Alert.alert('Error', 'Failed to prepare destroy operation');
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  const renderGroupedCoupons = ({ item }: { item: GroupedCoupons }) => {
-    const isExpanded = expandedGroups.has(item.merchant);
-    
-    return (
-      <View style={styles.merchantGroup}>
-        <TouchableOpacity
-          style={styles.merchantHeader}
-          onPress={() => toggleGroupExpansion(item.merchant)}
-        >
-          <Text style={styles.merchantName}>{item.merchant}</Text>
-          <View style={styles.merchantInfo}>
-            <Text style={styles.couponCount}>{item.count} coupon{item.count !== 1 ? 's' : ''}</Text>
-            <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
-          </View>
-        </TouchableOpacity>
-        
-        {isExpanded && (
-          <View style={styles.couponsList}>
-            {item.coupons.map((coupon, index) => (
-              <View key={coupon.id} style={styles.couponCard}>
-                <View style={styles.couponHeader}>
-                  <Text style={styles.couponName}>{coupon.name}</Text>
-                  <Text style={styles.valueText}>
-                    {coupon.discountType === 'percentage' ? `${coupon.value}% OFF` : 
-                     coupon.discountType === 'fixed_amount' ? `$${coupon.value} OFF` :
-                     coupon.discountType === 'free_item' ? 'FREE' : `${coupon.value}`}
-                  </Text>
-                </View>
-                <Text style={styles.couponDescription}>{coupon.description}</Text>
-                <Text style={styles.validUntilText}>
-                  Expires: {coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString() : 'No expiry date'}
-                </Text>
-                <Text style={styles.nftText}>NFT: {coupon.tokenId}:{coupon.serialNumber}</Text>
-                
-                <View style={styles.buttonContainer}>
-                  <TouchableOpacity
-                    style={styles.redeemButton}
-                    onPress={() => handleRedeemCoupon(coupon)}
-                  >
-                    <Text style={styles.redeemButtonText}>
-                      {coupon.campaignType === 'discount_code' ? '💳 Get Code' : '🎫 Show QR'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.burnButton}
-                    onPress={() => handleBurnCoupon(coupon)}
-                  >
-                    <Text style={styles.burnButtonText}>🔥 Burn</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    );
+  const handleWalletPress = () => {
+    navigation.navigate('Wallet' as never);
   };
 
-  // Show wallet creation prompt if user doesn't have a wallet
-  if (hasWallet === false) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.walletPromptContainer}>
-          <Text style={styles.walletPromptTitle}>No Wallet Found</Text>
-          <Text style={styles.walletPromptSubtitle}>
-            Create a Hedera wallet to start collecting and managing digital coupons
+  const handleCreateWallet = () => {
+    navigation.navigate('Wallet' as never);
+  };
+
+  const getFilterCounts = () => {
+    const now = new Date();
+    const all = coupons.length;
+    const available = coupons.filter(coupon => {
+      if (!coupon.validUntil) return true;
+      const expiryDate = new Date(coupon.validUntil);
+      return expiryDate > now;
+    }).length;
+    const expired = coupons.filter(coupon => {
+      if (!coupon.validUntil) return false;
+      const expiryDate = new Date(coupon.validUntil);
+      return expiryDate <= now;
+    }).length;
+
+    return { all, available, expired };
+  };
+
+  const formatDiscountInfo = (coupon: Coupon) => {
+    if (coupon.discountType === 'percentage') {
+      return `${coupon.discountPercent || 0}% OFF`;
+    } else {
+      return `${coupon.value || 'Discount'}`;
+    }
+  };
+
+  const renderCoupon = ({ item }: { item: Coupon }) => (
+    <View style={styles.couponCard}>
+      <View style={styles.couponContent}>
+        <View style={styles.couponHeader}>
+          <Text style={styles.couponName}>{item.name || 'Coupon'}</Text>
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>{formatDiscountInfo(item)}</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.merchantName}>
+          {item.merchant || 'Unknown Merchant'}
+        </Text>
+        
+        <View style={styles.couponFooter}>
+          <Text style={styles.expiryText}>
+            Expires {new Date(item.validUntil || Date.now()).toLocaleDateString()}
           </Text>
-          
-          <TouchableOpacity
-            style={styles.createWalletButton}
-            onPress={() => navigation.navigate('Wallet')}
+          <TouchableOpacity 
+            style={styles.redeemButton}
+            onPress={() => handleRedeemPress(item)}
           >
-            <Text style={styles.createWalletButtonText}>Create Wallet</Text>
+            <Text style={styles.redeemButtonText}>Redeem</Text>
           </TouchableOpacity>
         </View>
       </View>
-    );
-  }
+    </View>
+  );
+
+  const FilterButton = ({ 
+    type, 
+    label, 
+    count 
+  }: { 
+    type: FilterType; 
+    label: string; 
+    count: number; 
+  }) => (
+    <TouchableOpacity
+      style={[styles.filterButton, activeFilter === type && styles.filterButtonActive]}
+      onPress={() => setActiveFilter(type)}
+    >
+      <Text style={[styles.filterButtonText, activeFilter === type && styles.filterButtonTextActive]}>
+        {label} {count}
+      </Text>
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2563eb" />
-        <Text style={styles.loadingText}>Loading your coupons...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
+  if (hasWallet === false) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+        
+        {/* Header */}
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.header}
+        >
+          <Text style={styles.headerLogo}>dysco</Text>
+          <Text style={styles.headerTitle}>Welcome, user!</Text>
+          <Text style={styles.headerSubtitle}>Create a wallet to start collecting coupons</Text>
+        </LinearGradient>
+
+        <View style={styles.noWalletContainer}>
+          <Text style={styles.noWalletEmoji}>💰</Text>
+          <Text style={styles.noWalletTitle}>No Wallet Found</Text>
+          <Text style={styles.noWalletSubtitle}>
+            Create a wallet to start collecting and managing your digital coupons
+          </Text>
+          <TouchableOpacity style={styles.createWalletButton} onPress={handleCreateWallet}>
+            <Text style={styles.createWalletButtonText}>Create Wallet</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const counts = getFilterCounts();
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-      <Text style={styles.title}>My Coupons</Text>
-        <Text style={styles.subtitle}>
-          {coupons.length > 0 
-            ? `You have ${coupons.length} coupon${coupons.length > 1 ? 's' : ''} from ${groupedCoupons.length} merchant${groupedCoupons.length > 1 ? 's' : ''}` 
-            : 'No coupons yet'
-          }
-        </Text>
+      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+      
+      {/* Header */}
+      <LinearGradient
+        colors={['#667eea', '#764ba2']}
+        style={styles.header}
+      >
+        <SafeAreaView>
+        <View style={styles.headerContent}>
+        <Text style={styles.headerLogo}>dysco</Text>
+        <Text style={styles.headerTitle}>Welcome, user!</Text>
+        <Text style={styles.headerSubtitle}>Check your available coupons</Text>
+        
+        {/* Wallet Card */}
+        <TouchableOpacity style={styles.walletCard} onPress={handleWalletPress}>
+          <View style={styles.walletIcon}>
+            <Text style={styles.walletIconText}>💰</Text>
+            <View style={styles.hederaBadge}>
+              <Text style={styles.hederaBadgeText}>H</Text>
+            </View>
+          </View>
+          <View style={styles.walletContent}>
+            <Text style={styles.walletTitle}>My Wallet</Text>
+            <Text style={styles.walletBalance}>{balance.toFixed(2)} HBAR</Text>
+          </View>
+          <Text style={styles.walletArrow}>→</Text>
+        </TouchableOpacity>
+        </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* Content */}
+      <View style={styles.content}>
+        {/* My Coupons Section */}
+        <View style={styles.couponsSection}>
+          <Text style={styles.sectionTitle}>My Coupons</Text>
+          
+          {/* Filter Buttons */}
+          <View style={styles.filtersContainer}>
+            <FilterButton type="all" label="All" count={counts.all} />
+            <FilterButton type="available" label="Available" count={counts.available} />
+            <FilterButton type="expired" label="Expired" count={counts.expired} />
+          </View>
+        </View>
+
+        {/* Coupons List */}
+        {filteredCoupons.length === 0 ? (
+          <View style={styles.emptyCouponsContainer}>
+            <Text style={styles.emptyCouponsText}>🎫</Text>
+            <Text style={styles.emptyCouponsTitle}>No coupons available</Text>
+            <Text style={styles.emptyCouponsSubtitle}>
+              Visit the Discover tab to find and claim amazing deals
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredCoupons}
+            renderItem={renderCoupon}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
 
-      <FlatList
-        data={groupedCoupons}
-        renderItem={renderGroupedCoupons}
-        keyExtractor={(item) => item.merchant}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No coupons found</Text>
-            <Text style={styles.emptySubtext}>
-              Claim some coupons from the home screen to see them here
-            </Text>
-            <TouchableOpacity
-              style={styles.browseButton}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.browseButtonText}>Browse Coupons</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
-      
-      {/* QR Code Modal for Redemption */}
+      {/* QR Code Modal */}
       <QRCodeModal
         visible={qrModalVisible}
-        onClose={() => setQrModalVisible(false)}
         redemptionToken={redemptionToken}
-        couponName={selectedCoupon?.name || ''}
+        couponName={selectedCoupon?.name || 'Coupon'}
         discountInfo={selectedCoupon ? formatDiscountInfo(selectedCoupon) : ''}
+        onClose={() => {
+          console.log('🚪 Closing QR modal');
+          setQrModalVisible(false);
+          setRedemptionToken('');
+          setSelectedCoupon(null);
+        }}
       />
     </View>
   );
@@ -413,250 +424,258 @@ export default function MyCouponsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8F9FA',
+    paddingBottom: 140, // Add more space for floating tab bar and elevated Discover button
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666666',
   },
   header: {
-    backgroundColor: '#2563eb',
-    padding: 20,
-    paddingTop: 60,
+    paddingTop: 0, // Remove top padding so gradient goes to top
+    paddingBottom: 30,
+    paddingHorizontal: 0, // Remove horizontal padding, will add it inside SafeAreaView
   },
-  title: {
-    fontSize: 28,
+  headerContent: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
+  },
+  headerLogo: {
+    fontSize: 24,
+    fontWeight: '300',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 16,
-    color: '#bfdbfe',
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginBottom: 20,
   },
-  listContainer: {
+  walletCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 16,
     padding: 16,
+    marginTop: 8,
+  },
+  walletIcon: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  walletIconText: {
+    fontSize: 32,
+  },
+  hederaBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hederaBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  walletContent: {
+    flex: 1,
+  },
+  walletTitle: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginBottom: 4,
+  },
+  walletBalance: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  walletArrow: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    opacity: 0.7,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 24,
+  },
+  couponsSection: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 20,
+  },
+  filtersContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666666',
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   couponCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  couponContent: {
+    padding: 20,
   },
   couponHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
   couponName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontWeight: '600',
+    color: '#1a1a1a',
     flex: 1,
+    marginRight: 12,
   },
-  valueText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#059669',
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  discountBadge: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  couponDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  merchantText: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 4,
-  },
-  expiryText: {
+  discountText: {
     fontSize: 12,
-    color: '#9ca3af',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  nftIdText: {
-    fontSize: 10,
-    color: '#9ca3af',
-    fontFamily: 'monospace',
-    marginBottom: 12,
-  },
-  qrButton: {
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  qrButtonText: {
-    color: '#fff',
+  merchantName: {
     fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  browseButton: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  browseButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  walletPromptContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  walletPromptTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontWeight: '500',
+    color: '#667eea',
     marginBottom: 16,
-    textAlign: 'center',
   },
-  walletPromptSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
-  },
-  createWalletButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    width: '100%',
-  },
-  createWalletButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  // Grouped styles
-  merchantGroup: {
-    marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  merchantHeader: {
+  couponFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f8fafc',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
-  merchantName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-    flex: 1,
+  expiryText: {
+    fontSize: 12,
+    color: '#999999',
   },
-  merchantInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  couponCount: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  expandIcon: {
-    fontSize: 16,
-    color: '#6b7280',
-    fontWeight: 'bold',
-  },
-  couponsList: {
-    padding: 8,
-  },
-  // Button container for redeem and burn buttons
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-  },
-  // Updated redeem button styles
   redeemButton: {
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
+    backgroundColor: '#667eea',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   redeemButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    textAlign: 'center',
+    color: '#FFFFFF',
   },
-  // Burn button styles
-  burnButton: {
-    backgroundColor: '#dc2626',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  emptyCouponsContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingTop: 60,
   },
-  burnButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  emptyCouponsText: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyCouponsTitle: {
+    fontSize: 20,
     fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 8,
     textAlign: 'center',
   },
-  // Updated text styles
-  validUntilText: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginBottom: 4,
+  emptyCouponsSubtitle: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  nftText: {
-    fontSize: 11,
-    color: '#d1d5db',
-    fontFamily: 'monospace',
+  noWalletContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
   },
-}); 
+  noWalletEmoji: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
+  noWalletTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  noWalletSubtitle: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  createWalletButton: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 25,
+  },
+  createWalletButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+});
