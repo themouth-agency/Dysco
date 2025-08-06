@@ -96,7 +96,8 @@ export default function WalletScreen({ navigation }: Props) {
       }
 
       // Create Hedera account on backend
-      const response = await fetch('http://192.168.0.49:3001/api/users/create-account', {
+      const { API_BASE_URL } = await import('../config/api');
+      const response = await fetch(`${API_BASE_URL}/api/users/create-account`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

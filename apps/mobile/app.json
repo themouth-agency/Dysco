@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Dysco",
+    "slug": "dysco-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,16 +15,21 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Dysco uses Face ID to securely protect your merchant wallet and private keys."
+        "NSFaceIDUsageDescription": "Dysco uses Face ID to securely protect your merchant wallet and private keys.",
+        "NSCameraUsageDescription": "Dysco uses the camera to scan QR codes for coupon redemption."
       },
-      "bundleIdentifier": "com.anonymous.mobile"
+      "bundleIdentifier": "com.dysco.mobile"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.dysco.mobile",
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,6 +37,17 @@
     "scheme": "dysco",
     "plugins": [
       "expo-camera"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }

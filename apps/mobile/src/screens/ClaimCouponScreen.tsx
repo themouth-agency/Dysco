@@ -69,7 +69,8 @@ export default function ClaimCouponScreen({ navigation, route }: Props) {
     setLoading(true);
     try {
       // Get basic campaign info from the share link endpoint
-      const response = await fetch(`http://192.168.0.49:3001/api/campaigns/${campaignId}/share-link`);
+      const { API_BASE_URL } = await import('../config/api');
+      const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaignId}/share-link`);
       const data = await response.json();
       
       if (data.success) {

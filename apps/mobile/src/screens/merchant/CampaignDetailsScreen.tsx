@@ -18,8 +18,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { MerchantStackParamList } from '../../navigation/MerchantNavigator';
 import { getCampaignShareLink } from '../../services/api';
-
-const API_BASE_URL = 'http://192.168.0.49:3001';
+import { API_BASE_URL } from '../../config/api';
 
 type CampaignDetailsScreenNavigationProp = StackNavigationProp<MerchantStackParamList, 'CampaignDetails'>;
 type CampaignDetailsScreenRouteProp = RouteProp<MerchantStackParamList, 'CampaignDetails'>;

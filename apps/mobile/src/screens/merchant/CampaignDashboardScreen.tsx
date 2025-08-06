@@ -12,8 +12,7 @@ import {
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MerchantStackParamList } from '../../navigation/MerchantNavigator';
 import { supabaseAuthService } from '../../services/supabaseAuth';
-
-const API_BASE_URL = 'http://192.168.0.49:3001';
+import { API_BASE_URL } from '../../config/api';
 
 type CampaignDashboardScreenNavigationProp = StackNavigationProp<MerchantStackParamList, 'CampaignDashboard'>;
 

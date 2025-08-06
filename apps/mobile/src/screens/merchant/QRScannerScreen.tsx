@@ -109,7 +109,7 @@ export default function QRScannerScreen({ navigation }: Props) {
   };
 
   const verifyAndRedeemToken = async (redemptionToken: string) => {
-    const API_BASE_URL = 'http://192.168.0.49:3001';
+    const { API_BASE_URL } = await import('../../config/api');
     
     try {
       // First verify the token
@@ -224,7 +224,7 @@ export default function QRScannerScreen({ navigation }: Props) {
   const redeemCoupon = async (qrData: any) => {
     try {
       // Call backend to redeem the coupon (burn NFT)
-      const API_BASE_URL = 'http://192.168.0.49:3001';
+      const { API_BASE_URL } = await import('../../config/api');
       const response = await fetch(`${API_BASE_URL}/api/coupons/redeem`, {
         method: 'POST',
         headers: {

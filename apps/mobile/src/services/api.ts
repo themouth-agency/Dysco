@@ -1,6 +1,5 @@
 import { Coupon } from '../types';
-
-const API_BASE_URL = 'http://192.168.0.49:3001'; // Your computer's IP address
+import { API_BASE_URL } from '../config/api';
 
 export interface ApiResponse<T> {
   success: boolean;
