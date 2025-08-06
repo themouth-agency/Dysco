@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,9 @@ export default function QRScannerScreen({ navigation }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef(false);
+  const lastScannedRef = useRef<string>('');
 
   useEffect(() => {
     if (!permission) {
@@ -29,7 +32,21 @@ export default function QRScannerScreen({ navigation }: Props) {
   }, [permission, requestPermission]);
 
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    // Immediate blocking using ref (synchronous)
+    if (processingRef.current || lastScannedRef.current === data) {
+      console.log('🚫 Blocking duplicate scan');
+      return;
+    }
+
+    console.log('🔍 QR Code scanned:', data.substring(0, 50) + '...');
+    
+    // Set ref immediately (synchronous)
+    processingRef.current = true;
+    lastScannedRef.current = data;
+    
+    // Set states
     setScanned(true);
+    setIsProcessing(true);
     setIsScanning(false);
 
     try {
@@ -49,7 +66,10 @@ export default function QRScannerScreen({ navigation }: Props) {
                 text: 'Cancel',
                 style: 'cancel',
                 onPress: () => {
+                  processingRef.current = false;
+                  lastScannedRef.current = '';
                   setScanned(false);
+                  setIsProcessing(false);
                   setIsScanning(true);
                 }
               },
@@ -70,7 +90,10 @@ export default function QRScannerScreen({ navigation }: Props) {
             {
               text: 'Scan Again',
               onPress: () => {
+                processingRef.current = false;
+                lastScannedRef.current = '';
                 setScanned(false);
+                setIsProcessing(false);
                 setIsScanning(true);
               }
             },
@@ -117,7 +140,10 @@ export default function QRScannerScreen({ navigation }: Props) {
             text: 'Cancel',
             style: 'cancel',
             onPress: () => {
+              processingRef.current = false;
+              lastScannedRef.current = '';
               setScanned(false);
+              setIsProcessing(false);
               setIsScanning(true);
             }
           },
@@ -170,7 +196,10 @@ export default function QRScannerScreen({ navigation }: Props) {
                     {
                       text: 'Try Again',
                       onPress: () => {
+                        processingRef.current = false;
+                        lastScannedRef.current = '';
                         setScanned(false);
+                        setIsProcessing(false);
                         setIsScanning(true);
                       }
                     },
@@ -233,7 +262,10 @@ export default function QRScannerScreen({ navigation }: Props) {
           {
             text: 'Try Again',
             onPress: () => {
+              processingRef.current = false;
+              lastScannedRef.current = '';
               setScanned(false);
+              setIsProcessing(false);
               setIsScanning(true);
             }
           },
@@ -248,8 +280,11 @@ export default function QRScannerScreen({ navigation }: Props) {
   };
 
   const startScanning = () => {
+    processingRef.current = false;
+    lastScannedRef.current = '';
     setIsScanning(true);
     setScanned(false);
+    setIsProcessing(false);
   };
 
   if (!permission) {
@@ -282,7 +317,7 @@ export default function QRScannerScreen({ navigation }: Props) {
           barcodeScannerSettings={{
             barcodeTypes: ['qr'],
           }}
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          onBarcodeScanned={scanned || isProcessing ? undefined : handleBarCodeScanned}
         >
           <View style={styles.scannerOverlay}>
             <View style={styles.scannerFrame}>

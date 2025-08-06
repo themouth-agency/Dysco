@@ -37,18 +37,10 @@ export default function MerchantDashboardScreen({ navigation }: Props) {
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => navigation.navigate('CreateCoupon')}
-        >
-          <Text style={styles.actionButtonText}>Create Coupon</Text>
-          <Text style={styles.actionButtonSubtext}>Create a new coupon NFT</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
           onPress={() => navigation.navigate('CampaignDashboard')}
         >
           <Text style={styles.actionButtonText}>Manage Campaigns</Text>
-          <Text style={styles.actionButtonSubtext}>Organize coupons by campaigns</Text>
+          <Text style={styles.actionButtonSubtext}>Create and organize coupon campaigns</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
