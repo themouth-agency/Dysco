@@ -32,7 +32,9 @@ const TabIcon = ({ iconName, label, focused }: { iconName: string; label: string
 const DiscoverTabIcon = ({ focused }: { focused: boolean }) => (
   <View style={styles.discoverContainer}>
     <LinearGradient
-      colors={['#667eea', '#764ba2']}
+      colors={['#FAF6E5', '#FAC989', '#E298C4', '#C580E2', '#B091F4', '#8DB4FF', '#5EDAFF', '#31ECD9']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
       style={styles.discoverButton}
     >
       <Text style={styles.discoverIcon}>%</Text>
@@ -116,8 +118,15 @@ export default function UserTabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarStyle: { 
+          display: 'none',
+          backgroundColor: 'transparent',
+          position: 'absolute',
+          elevation: 0,
+        }, // Hide default tab bar completely
       }}
       tabBar={(props) => <CustomTabBar {...props} />}
+      sceneContainerStyle={{ backgroundColor: 'transparent' }}
     >
       <Tab.Screen
         name="MyCoupons"
@@ -142,21 +151,18 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 30,
+    borderRadius: 50, // More rounded for complete pill shape
     paddingVertical: 12,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'space-around',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
     minHeight: 70,
+    // Removed all shadow properties for flat appearance
   },
   regularTabContainer: {
     flex: 1,
@@ -206,11 +212,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 4,
-    elevation: 12,
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    // Removed shadow properties for flat appearance
     borderWidth: 4,
     borderColor: '#FFFFFF', // Add white border for better contrast
   },
