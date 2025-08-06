@@ -5,7 +5,8 @@
 // const API_BASE_URL = 'http://192.168.0.49:3001';
 
 // 🚂 Railway Production (for online testing and production)
-const API_BASE_URL = 'https://YOUR_RAILWAY_APP_NAME.up.railway.app';
+// Note: Replace with your PUBLIC Railway URL (not the .internal one)
+const API_BASE_URL = 'https://dysco-production.up.railway.app'; // Update this with your actual public URL
 
 // 🧪 Auto-detect environment (optional - uncomment if you want auto-switching)
 // const API_BASE_URL = __DEV__ 
