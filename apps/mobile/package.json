@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.1",
-    "@expo/metro-runtime": "~5.0.4",
     "@magic-sdk/react-native-expo": "^30.4.0",
     "@noble/curves": "^1.9.4",
     "@noble/ed25519": "^2.3.0",
@@ -32,6 +31,7 @@
     "@scure/bip39": "^1.6.0",
     "@supabase/supabase-js": "^2.53.0",
     "expo": "~53.0.20",
+    "expo-av": "~15.1.7",
     "expo-blur": "~14.1.5",
     "expo-camera": "~16.1.11",
     "expo-clipboard": "^7.1.5",
@@ -41,16 +41,16 @@
     "expo-local-authentication": "^16.0.5",
     "expo-secure-store": "^14.2.3",
     "expo-status-bar": "~2.2.3",
-    "expo-video": "^2.2.2",
     "react": "19.0.0",
-    "react-dom": "19.0.0",
     "react-native": "0.79.5",
     "react-native-get-random-values": "^1.11.0",
     "react-native-qrcode-svg": "^6.3.15",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "15.11.2",
-    "react-native-web": "^0.20.0"
+    "react-dom": "19.0.0",
+    "react-native-web": "^0.20.0",
+    "@expo/metro-runtime": "~5.0.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

@@ -166,7 +166,7 @@ export default function MnemonicVerificationScreen({ navigation, route }: Props)
               // Navigate back to main app
               navigation.reset({
                 index: 0,
-                routes: [{ name: 'MainTabs' }],
+                routes: [{ name: 'Home' }],
               });
             }
           }
