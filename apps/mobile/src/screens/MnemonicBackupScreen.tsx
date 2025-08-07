@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Clipboard,
+
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 
@@ -30,8 +31,8 @@ export default function MnemonicBackupScreen({ navigation, route }: Props) {
 
   const words = mnemonic.split(' ');
 
-  const handleCopyToClipboard = () => {
-    Clipboard.setString(mnemonic);
+  const handleCopyToClipboard = async () => {
+    await Clipboard.setStringAsync(mnemonic);
     Alert.alert('Copied!', 'Mnemonic phrase copied to clipboard');
   };
 

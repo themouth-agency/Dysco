@@ -12,8 +12,9 @@ import {
   TextInput,
   Modal,
   Share,
-  Clipboard,
+
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { MerchantStackParamList } from '../../navigation/MerchantNavigator';
@@ -198,7 +199,7 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
       // Fallback: copy to clipboard
       try {
         const linkData = await getCampaignShareLink(campaignId);
-        await Clipboard.setString(linkData.shareLink);
+        await Clipboard.setStringAsync(linkData.shareLink);
         Alert.alert('Link Copied', 'Campaign link copied to clipboard!');
       } catch (clipboardError) {
         Alert.alert('Error', 'Failed to share campaign');

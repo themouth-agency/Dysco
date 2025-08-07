@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { SvgXml } from 'react-native-svg';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAppMode } from '../contexts/AppModeContext';
@@ -27,6 +27,12 @@ interface Props {
 
 export default function WelcomeScreen({ navigation, onRoleSelected }: Props) {
   const { setMode } = useAppMode();
+  
+  const player = useVideoPlayer(require('../../assets/welcome_gradient.mp4'), player => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   const selectCustomerRole = () => {
     console.log('🎯 Customer button pressed!');
@@ -52,13 +58,10 @@ export default function WelcomeScreen({ navigation, onRoleSelected }: Props) {
       <View style={styles.header}>
         <View style={styles.circleContainer}>
           {/* Circular Video */}
-          <Video
-            source={require('../../assets/welcome_gradient.mp4')}
+          <VideoView
             style={styles.circularVideo}
-            shouldPlay
-            isLooping
-            isMuted
-            resizeMode="cover"
+            player={player}
+            contentFit="cover"
           />
           
           {/* Dysco Logo Overlay */}

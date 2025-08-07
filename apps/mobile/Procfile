@@ -1,1 +1,0 @@
-web: CI=1 npx expo start --tunnel --port $PORT

@@ -8,7 +8,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { SvgXml } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
@@ -21,6 +21,12 @@ interface Props {
 }
 
 export default function SplashScreen({ navigation }: Props) {
+  const player = useVideoPlayer(require('../../assets/dysco_splash.mp4'), player => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
+
   const handleTap = () => {
     navigation.navigate();
   };
@@ -52,13 +58,10 @@ export default function SplashScreen({ navigation }: Props) {
         {/* Circular Video Container */}
         <View style={styles.circleContainer}>
           {/* Circular Video */}
-          <Video
-            source={require('../../assets/dysco_splash.mp4')}
+          <VideoView
             style={styles.circularVideo}
-            shouldPlay
-            isLooping
-            isMuted
-            resizeMode="cover"
+            player={player}
+            contentFit="cover"
           />
           
           {/* Glass highlight effect */}
