@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "cd apps/mobile && npm install"
+  },
+  "deploy": {
+    "startCommand": "cd apps/mobile && npx expo start --tunnel --port $PORT",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "always"
+  }
+}
