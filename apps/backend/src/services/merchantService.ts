@@ -623,7 +623,10 @@ export class MerchantService {
       const metadataId = `${campaign.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       // For HIP-412 compliance: create metadata URL (will be saved after successful mint)
-      const metadataUrl = `http://192.168.0.49:3001/metadata/${metadataId}.json`;
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://dysco-production.up.railway.app'
+        : 'http://192.168.0.49:3001';
+      const metadataUrl = `${baseUrl}/metadata/${metadataId}.json`;
       
       // Mint NFT on Hedera with just the metadata URL
       const mintTransaction = new TokenMintTransaction()
@@ -727,7 +730,10 @@ export class MerchantService {
         }
 
         const metadataId = `${campaign.id}_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
-        const metadataUrl = `http://192.168.0.49:3001/metadata/${metadataId}.json`;
+        const baseUrl = process.env.NODE_ENV === 'production' 
+          ? 'https://dysco-production.up.railway.app'
+          : 'http://192.168.0.49:3001';
+        const metadataUrl = `${baseUrl}/metadata/${metadataId}.json`;
 
         const metadata = {
           name: `${campaign.name}`,

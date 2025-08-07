@@ -6,12 +6,12 @@
 
 // 🚂 Railway Production (for online testing and production)
 // Note: Replace with your PUBLIC Railway URL (not the .internal one)
-const API_BASE_URL = 'https://dysco-production.up.railway.app';
+// const API_BASE_URL = 'https://dysco-production.up.railway.app';
 
-// 🧪 Auto-detect environment (optional - uncomment if you want auto-switching)
-// const API_BASE_URL = __DEV__ 
-//   ? 'http://192.168.0.49:3001'  // Local when debugging
-//   : 'https://YOUR_RAILWAY_APP_NAME.up.railway.app';  // Railway when released
+// 🧪 Auto-detect environment (automatically switches between local and production)
+const API_BASE_URL = __DEV__ 
+  ? 'http://192.168.0.49:3001'  // Local when debugging
+  : 'https://dysco-production.up.railway.app';  // Railway when released
 
 export { API_BASE_URL };
 

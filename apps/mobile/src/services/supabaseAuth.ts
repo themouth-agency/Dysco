@@ -97,7 +97,7 @@ class SupabaseAuthService {
         // Email confirmation can happen later, but profile needs to exist
         try {
           console.log('🏗️ Creating merchant profile during registration...');
-          const API_BASE_URL = 'http://192.168.0.49:3001';
+          const API_BASE_URL = 'https://dysco-production.up.railway.app';
           const response = await fetch(`${API_BASE_URL}/api/merchants/register-with-key`, {
             method: 'POST',
             headers: {

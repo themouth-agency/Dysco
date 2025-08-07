@@ -32,8 +32,11 @@ async function saveMetadataFile(nftId: string, metadata: any): Promise<string> {
     
     await fs.writeFile(filepath, JSON.stringify(metadata, null, 2));
     
-    // Return the public URL (adjust domain as needed)
-    return `http://192.168.0.49:3001/metadata/${filename}`;
+    // Return the public URL (auto-detect environment)
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://dysco-production.up.railway.app'
+      : 'http://192.168.0.49:3001';
+    return `${baseUrl}/metadata/${filename}`;
   } catch (error) {
     console.error('❌ Failed to save metadata file:', error);
     throw error;
