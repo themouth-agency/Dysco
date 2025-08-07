@@ -21,7 +21,6 @@ export type RootStackParamList = {
   Splash: undefined;
   Welcome: undefined;
   MainTabs: undefined;
-  Home: undefined;
   CouponDetail: { couponId: string };
   MyCoupons: undefined;
   Wallet: undefined;
