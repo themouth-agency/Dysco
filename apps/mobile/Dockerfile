@@ -7,8 +7,8 @@ RUN npm install -g @expo/cli@latest
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy mobile app package files
+COPY apps/mobile/package*.json ./
 
 # Install dependencies
 RUN npm install
@@ -17,7 +17,7 @@ RUN npm install
 RUN npm install @expo/ngrok@^4.1.0
 
 # Copy the entire mobile app
-COPY . .
+COPY apps/mobile/ .
 
 # Expose the port
 EXPOSE 8081
