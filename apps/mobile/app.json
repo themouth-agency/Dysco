@@ -28,7 +28,9 @@
       "edgeToEdgeEnabled": true,
       "package": "com.dysco.mobile",
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -40,14 +42,12 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "1355186e-ed5e-49d9-86ae-c9b2f7398c89"
       }
-    },
-    "updates": {
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "owner": "themouth"
   }
 }
