@@ -619,12 +619,9 @@ export class MerchantService {
         metadata.properties.discountCode = discountCode;
       }
 
-      // Generate unique but short metadata ID to fit Hedera's ~100 byte limit
-      const shortId = `${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
-      const metadataId = `camp_${campaign.id}_${shortId}`;
-      
-      // Use relative path - much shorter than full URL (~15 chars vs ~70)
-      const metadataUrl = `/m/${shortId}.json`;
+      // Generate metadata ID and use relative path (removes ~40 chars domain)  
+      const metadataId = `${campaign.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const metadataUrl = `/metadata/${metadataId}.json`;
       
       // Mint NFT on Hedera with just the metadata URL
       const mintTransaction = new TokenMintTransaction()
@@ -724,10 +721,9 @@ export class MerchantService {
       for (let i = 0; i < quantity; i++) {
         // Don't generate discount codes in metadata - they will be generated securely upon redemption
 
-        // Use relative path to fit Hedera's ~100 byte limit (~15 chars vs ~70)
-        const shortId = `${Date.now().toString(36)}_${i}_${Math.random().toString(36).substr(2, 5)}`;
-        const metadataUrl = `/m/${shortId}.json`; // Relative path - much shorter!
-        const metadataId = `camp_${campaign.id}_${shortId}`; // Keep full ID for file saving
+        // Use relative metadata path (removes ~40 chars domain)
+        const metadataId = `${campaign.id}_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+        const metadataUrl = `/metadata/${metadataId}.json`; // Relative path - shorter but same format
 
         const metadata = {
           name: `${campaign.name}`,

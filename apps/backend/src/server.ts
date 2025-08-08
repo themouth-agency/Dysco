@@ -20,7 +20,6 @@ app.use(express.json());
 
 // Serve static metadata files for HIP-412 compliance
 app.use('/metadata', express.static(path.join(__dirname, '../metadata')));
-app.use('/m', express.static(path.join(__dirname, '../metadata'))); // Short path for NFT URLs
 
 // Utility function to save metadata files
 async function saveMetadataFile(nftId: string, metadata: any): Promise<string> {
@@ -197,6 +196,7 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
 
       // Query user's NFTs from Mirror Node
       const userNFTs = await MirrorNodeService.getAccountNFTs(accountId);
+      console.log(`📊 Mirror Node returned ${userNFTs.length} NFTs for account ${accountId}`);
       
       // Filter only coupon NFTs and get their metadata
       const couponNFTs = [];
@@ -207,6 +207,7 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
         try {
           // Get metadata URL from the NFT (HIP-412 format)
           const metadataUrl = Buffer.from(nft.metadata, 'base64').toString('utf-8');
+          console.log(`🔍 Processing NFT ${nftId} with metadata URL: "${metadataUrl}"`);
           
           if (metadataUrl) {
             let fetchUrl = metadataUrl;
@@ -390,23 +391,15 @@ app.post('/api/coupons/mint', async (req, res) => {
       created_at: new Date().toISOString()
     };
 
-    // Generate short metadata ID to fit Hedera's ~100 byte limit
-    const shortId = `${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
-    const metadataId = `coupon_${shortId}`;
-    
-    // Save metadata file and get relative URL
-    const metadataDir = path.join(__dirname, '../metadata');
-    await fs.mkdir(metadataDir, { recursive: true });
-    const filepath = path.join(metadataDir, `${shortId}.json`);
-    await fs.writeFile(filepath, JSON.stringify(metadata, null, 2));
-    
-    // Use relative path - much shorter than full URL (~15 chars vs ~70)
-    const metadataUrl = `/m/${shortId}.json`;
+    // Generate metadata ID and use relative path (removes ~40 chars domain)
+    const metadataId = `coupon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const metadataUrl = await saveMetadataFile(metadataId, metadata);
+    const relativeUrl = metadataUrl.replace(/^https?:\/\/[^\/]+/, ''); // Convert to relative
 
-    // Mint the NFT with metadata URL (HIP-412 compliant)
+    // Mint the NFT with relative metadata URL (HIP-412 compliant)
     const tokenMintTx = new TokenMintTransaction()
       .setTokenId(tokenId!)
-      .setMetadata([Buffer.from(metadataUrl)]);
+      .setMetadata([Buffer.from(relativeUrl)]);
 
     const mintResponse = await tokenMintTx.execute(hederaClient);
     const mintReceipt = await mintResponse.getReceipt(hederaClient);
