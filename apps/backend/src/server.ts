@@ -208,10 +208,17 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
           const metadataUrl = Buffer.from(nft.metadata, 'base64').toString('utf-8');
           
           if (metadataUrl && metadataUrl.startsWith('http')) {
-            console.log(`🔍 Fetching metadata from: ${metadataUrl}`);
+            // Replace local URLs with Railway URLs for deployed environment
+            let fetchUrl = metadataUrl;
+            if (metadataUrl.includes('192.168.0.49:3001')) {
+              fetchUrl = metadataUrl.replace('http://192.168.0.49:3001', 'https://dysco-production.up.railway.app');
+              console.log(`🔄 Converted local URL to Railway URL: ${fetchUrl}`);
+            } else {
+              console.log(`🔍 Fetching metadata from: ${fetchUrl}`);
+            }
             
             // Fetch metadata from external URL
-            const metadataResponse = await fetch(metadataUrl);
+            const metadataResponse = await fetch(fetchUrl);
             if (metadataResponse.ok) {
               const metadata = await metadataResponse.json() as any;
               
