@@ -114,6 +114,12 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
     setMintModalVisible(false);
 
     try {
+      console.log('🎫 Starting mint request:', {
+        campaignId,
+        quantity,
+        url: `${API_BASE_URL}/api/campaigns/${campaignId}/coupons/mint`
+      });
+
       const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaignId}/coupons/mint`, {
         method: 'POST',
         headers: {
@@ -122,7 +128,11 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
         body: JSON.stringify({ quantity }),
       });
 
+      console.log('🎫 Response status:', response.status);
+      console.log('🎫 Response headers:', response.headers);
+
       const data = await response.json();
+      console.log('🎫 Response data:', data);
 
       if (data.success) {
         Alert.alert(
@@ -131,11 +141,12 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
           [{ text: 'OK', onPress: fetchCampaignData }]
         );
       } else {
+        console.error('🎫 Mint failed:', data.error);
         Alert.alert('Error', data.error || 'Failed to mint coupons');
       }
     } catch (error) {
-      console.error('Error minting coupons:', error);
-      Alert.alert('Error', 'Failed to mint coupons');
+      console.error('🎫 Mint error:', error);
+      Alert.alert('Error', `Failed to mint coupons: ${error.message || error}`);
     } finally {
       setMinting(false);
     }

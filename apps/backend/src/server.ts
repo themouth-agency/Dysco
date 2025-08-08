@@ -20,6 +20,7 @@ app.use(express.json());
 
 // Serve static metadata files for HIP-412 compliance
 app.use('/metadata', express.static(path.join(__dirname, '../metadata')));
+app.use('/m', express.static(path.join(__dirname, '../metadata'))); // Short path for NFT URLs
 
 // Utility function to save metadata files
 async function saveMetadataFile(nftId: string, metadata: any): Promise<string> {
@@ -207,14 +208,25 @@ if (process.env.HEDERA_PRIVATE_KEY && process.env.HEDERA_ACCOUNT_ID) {
           // Get metadata URL from the NFT (HIP-412 format)
           const metadataUrl = Buffer.from(nft.metadata, 'base64').toString('utf-8');
           
-          if (metadataUrl && metadataUrl.startsWith('http')) {
-            // Replace local URLs with Railway URLs for deployed environment
+          if (metadataUrl) {
             let fetchUrl = metadataUrl;
-            if (metadataUrl.includes('192.168.0.49:3001')) {
+            
+            if (metadataUrl.startsWith('/')) {
+              // Relative path - convert to full URL
+              const baseUrl = process.env.NODE_ENV === 'production' 
+                ? 'https://dysco-production.up.railway.app'
+                : 'http://192.168.0.49:3001';
+              fetchUrl = `${baseUrl}${metadataUrl}`;
+              console.log(`🔄 Converted relative path to full URL: ${fetchUrl}`);
+            } else if (metadataUrl.includes('192.168.0.49:3001')) {
+              // Legacy local URLs - convert to Railway URLs
               fetchUrl = metadataUrl.replace('http://192.168.0.49:3001', 'https://dysco-production.up.railway.app');
               console.log(`🔄 Converted local URL to Railway URL: ${fetchUrl}`);
-            } else {
+            } else if (metadataUrl.startsWith('http')) {
               console.log(`🔍 Fetching metadata from: ${fetchUrl}`);
+            } else {
+              console.log(`⚠️ Unknown metadata URL format: ${metadataUrl}`);
+              continue;
             }
             
             // Fetch metadata from external URL
@@ -378,9 +390,18 @@ app.post('/api/coupons/mint', async (req, res) => {
       created_at: new Date().toISOString()
     };
 
-    // Generate unique metadata ID and save file
-    const metadataId = `coupon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const metadataUrl = await saveMetadataFile(metadataId, metadata);
+    // Generate short metadata ID to fit Hedera's ~100 byte limit
+    const shortId = `${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
+    const metadataId = `coupon_${shortId}`;
+    
+    // Save metadata file and get relative URL
+    const metadataDir = path.join(__dirname, '../metadata');
+    await fs.mkdir(metadataDir, { recursive: true });
+    const filepath = path.join(metadataDir, `${shortId}.json`);
+    await fs.writeFile(filepath, JSON.stringify(metadata, null, 2));
+    
+    // Use relative path - much shorter than full URL (~15 chars vs ~70)
+    const metadataUrl = `/m/${shortId}.json`;
 
     // Mint the NFT with metadata URL (HIP-412 compliant)
     const tokenMintTx = new TokenMintTransaction()
