@@ -52,10 +52,12 @@ class DatabaseService {
 
   constructor() {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY; // Legacy fallback
 
     if (!supabaseUrl || !supabaseKey) {
       console.warn('⚠️ Supabase credentials not found - using memory storage');
+      console.warn('   Set SUPABASE_URL and SUPABASE_SECRET_KEY environment variables');
+      console.warn('   Get these from: Supabase Dashboard → Settings → API → Secret keys');
       this.supabase = null as any;
       return;
     }
@@ -466,6 +468,29 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
     }
 
     return redemptions || [];
+  }
+
+  /**
+   * Delete a user's discount code
+   */
+  async deleteUserDiscountCode(userAccountId: string, codeId: string): Promise<boolean> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data, error } = await this.supabase
+      .from('coupon_redemptions')
+      .delete()
+      .eq('id', codeId)
+      .eq('user_account_id', userAccountId)
+      .eq('redemption_method', 'discount_code')
+      .select('id');
+
+    if (error) {
+      throw new Error(`Failed to delete discount code: ${error.message}`);
+    }
+
+    return data && data.length > 0;
   }
 
   /**

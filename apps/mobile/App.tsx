@@ -38,8 +38,7 @@ export type RootStackParamList = {
   };
 };
 
-function AppContent() {
-  const { mode } = useAppMode();
+export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [hasSelectedRole, setHasSelectedRole] = useState(false);
 
@@ -47,6 +46,32 @@ function AppContent() {
     setHasSelectedRole(false);
     setShowSplash(true);
   };
+
+  return (
+    <SafeAreaProvider>
+      <AppModeProvider logout={handleLogout}>
+        <AppContent 
+          showSplash={showSplash}
+          setShowSplash={setShowSplash}
+          hasSelectedRole={hasSelectedRole}
+          setHasSelectedRole={setHasSelectedRole}
+          handleLogout={handleLogout}
+        />
+      </AppModeProvider>
+    </SafeAreaProvider>
+  );
+}
+
+interface AppContentProps {
+  showSplash: boolean;
+  setShowSplash: (show: boolean) => void;
+  hasSelectedRole: boolean;
+  setHasSelectedRole: (selected: boolean) => void;
+  handleLogout: () => void;
+}
+
+function AppContent({ showSplash, setShowSplash, hasSelectedRole, setHasSelectedRole, handleLogout }: AppContentProps) {
+  const { mode } = useAppMode();
 
   // Show splash screen initially
   if (showSplash) {
@@ -91,12 +116,4 @@ function AppContent() {
   );
 }
 
-export default function App() {
-  return (
-    <SafeAreaProvider>
-      <AppModeProvider>
-        <AppContent />
-      </AppModeProvider>
-    </SafeAreaProvider>
-  );
-}
+

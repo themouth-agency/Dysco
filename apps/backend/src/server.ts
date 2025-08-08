@@ -2330,6 +2330,50 @@ app.get('/api/users/:userAccountId/discount-codes', async (req, res) => {
   }
 });
 
+// Delete a user's discount code
+app.delete('/api/users/:userAccountId/discount-codes/:codeId', async (req, res) => {
+  try {
+    const { userAccountId, codeId } = req.params;
+    
+    if (!userAccountId || !codeId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User account ID and code ID are required'
+      });
+    }
+
+    if (!databaseService.isConnected()) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database not connected'
+      });
+    }
+
+    // Delete the discount code redemption record
+    const deleted = await databaseService.deleteUserDiscountCode(userAccountId, codeId);
+    
+    if (deleted) {
+      console.log(`🗑️ Deleted discount code ${codeId} for user ${userAccountId}`);
+      res.json({
+        success: true,
+        message: 'Discount code deleted successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Discount code not found or not owned by user'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error deleting user discount code:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete discount code'
+    });
+  }
+});
+
 /**
  * Verify and redeem a secure redemption token (for merchants)
  */

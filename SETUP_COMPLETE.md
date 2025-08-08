@@ -51,7 +51,7 @@ HEDERA_ACCOUNT_ID=0.0.your_account_id
 
 # Supabase Configuration
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SECRET_KEY=your_supabase_secret_key_here
 
 # Server Configuration
 PORT=3001

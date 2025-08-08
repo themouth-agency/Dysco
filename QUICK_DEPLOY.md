@@ -33,7 +33,7 @@ In Railway dashboard → Variables tab, add:
 - `HEDERA_PRIVATE_KEY=your_key_here`
 - `HEDERA_ACCOUNT_ID=0.0.your_account`
 - `SUPABASE_URL=your_supabase_url`
-- `SUPABASE_ANON_KEY=your_supabase_key`
+- `SUPABASE_SECRET_KEY=your_supabase_secret_key`
 - `NODE_ENV=production`
 
 ### 5. Test with Expo Go

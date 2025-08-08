@@ -11,10 +11,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SvgXml } from 'react-native-svg';
+
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MerchantStackParamList } from '../../navigation/MerchantAuthNavigator';
 import { merchantService } from '../../services/merchantService';
+import { useAppMode } from '../../contexts/AppModeContext';
 
 type MerchantSettingsScreenNavigationProp = StackNavigationProp<MerchantStackParamList, 'MerchantSettings'>;
 
@@ -25,6 +26,7 @@ interface Props {
 export default function MerchantSettingsScreen({ navigation }: Props) {
   const [merchantProfile, setMerchantProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { logout, setMode } = useAppMode();
 
   useEffect(() => {
     loadMerchantProfile();
@@ -43,6 +45,25 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
     }
   };
 
+  const handleSwitchToUser = () => {
+    Alert.alert(
+      'Switch to User Mode',
+      'Are you sure you want to switch to user mode? You will remain logged in as a merchant.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Switch',
+          onPress: () => {
+            setMode('user');
+          }
+        }
+      ]
+    );
+  };
+
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -57,8 +78,15 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await merchantService.signOut();
-              // Navigation will be handled by the auth navigator
+              const result = await merchantService.signOut();
+              if (result.success) {
+                // Go back to splash/welcome screen
+                if (logout) {
+                  logout();
+                }
+              } else {
+                Alert.alert('Error', result.error || 'Failed to sign out');
+              }
             } catch (error) {
               console.error('Error signing out:', error);
               Alert.alert('Error', 'Failed to sign out');
@@ -79,30 +107,7 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
     );
   };
 
-  const handleExportData = () => {
-    Alert.alert(
-      'Export Data',
-      'This feature allows you to export your merchant data. Would you like to continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Export',
-          onPress: () => {
-            // In a real app, this would export the data
-            Alert.alert('Success', 'Data export functionality would be implemented here');
-          }
-        }
-      ]
-    );
-  };
 
-  const handleContactSupport = () => {
-    Alert.alert(
-      'Contact Support',
-      'Need help? Contact our support team:\n\nsupport@dysco.com\n\nOr visit our help center for FAQ and guides.',
-      [{ text: 'OK' }]
-    );
-  };
 
   if (loading) {
     return (
@@ -113,18 +118,7 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
     );
   }
 
-  // Dysco logo SVG
-  const dyscoLogoSvg = `<svg width="196" height="65" viewBox="0 0 196 65" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M0 39.7143L7.54286 32.1714L15.0857 39.7143L7.54286 47.2571L0 39.7143Z" fill="#00A90B"/>
-<path d="M15.0857 24.6286L22.6286 17.0857L30.1714 24.6286L22.6286 32.1714L15.0857 24.6286Z" fill="#00A90B"/>
-<path d="M30.1714 39.7143L37.7143 32.1714L45.2571 39.7143L37.7143 47.2571L30.1714 39.7143Z" fill="#00A90B"/>
-<path d="M15.0857 54.8L22.6286 47.2571L30.1714 54.8L22.6286 62.3429L15.0857 54.8Z" fill="#00A90B"/>
-<path d="M7.54286 24.6286L15.0857 17.0857L22.6286 24.6286L15.0857 31.5429L7.54286 24.6286Z" fill="#00A90B"/>
-<path d="M22.6286 39.7143L30.1714 32.1714L37.7143 39.7143L30.1714 47.2571L22.6286 39.7143Z" fill="#00A90B"/>
-<path d="M37.7143 24.6286L45.2571 17.0857L52.8 24.6286L45.2571 32.1714L37.7143 24.6286Z" fill="#00A90B"/>
-<path d="M30.1714 9.54286L37.7143 2L45.2571 9.54286L37.7143 17.0857L30.1714 9.54286Z" fill="#00A90B"/>
-<text x="65" y="35" font-family="Arial" font-size="20" font-weight="bold" fill="#FFFFFF">Dysco</text>
-</svg>`;
+
 
   return (
     <View style={styles.container}>
@@ -142,11 +136,6 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
 
-          <View style={styles.logoRow}>
-            <SvgXml xml={dyscoLogoSvg} width={80} height={80 * (65/196)} />
-            <Text style={styles.businessText}>Business</Text>
-          </View>
-          
           <View style={styles.titleContainer}>
             <Text style={styles.title}>Merchant Settings</Text>
             <Text style={styles.subtitle}>
@@ -163,11 +152,6 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
         
         <TouchableOpacity style={styles.settingItem} onPress={handleShowAccountInfo}>
           <Text style={styles.settingText}>Account Information</Text>
-          <Text style={styles.settingArrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.settingItem} onPress={handleExportData}>
-          <Text style={styles.settingText}>Export Account Data</Text>
           <Text style={styles.settingArrow}>→</Text>
         </TouchableOpacity>
       </View>
@@ -206,15 +190,16 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
         
-        <TouchableOpacity style={styles.settingItem} onPress={handleContactSupport}>
-          <Text style={styles.settingText}>Contact Support</Text>
-          <Text style={styles.settingArrow}>→</Text>
-        </TouchableOpacity>
-
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>App Version</Text>
           <Text style={styles.infoValue}>1.0.0</Text>
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.switchModeButton} onPress={handleSwitchToUser}>
+          <Text style={styles.switchModeButtonText}>Switch to User Mode</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -235,13 +220,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    height: height * 0.32,
+    height: 140,
     paddingTop: 0,
   },
   headerContent: {
     flex: 1,
     paddingHorizontal: 20,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   backButton: {
     position: 'absolute',
@@ -255,22 +240,8 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '600',
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    marginBottom: 15,
-  },
-  businessText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#00A90B',
-    marginLeft: 10,
-  },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 20,
   },
   title: {
     fontSize: 24,
@@ -337,6 +308,18 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     color: '#059669',
     fontWeight: '600',
+  },
+  switchModeButton: {
+    backgroundColor: '#024E44',
+    marginHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  switchModeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   signOutButton: {
     backgroundColor: '#dc2626',

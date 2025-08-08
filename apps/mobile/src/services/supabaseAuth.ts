@@ -1,8 +1,5 @@
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
-
-// Supabase configuration - these should match backend credentials
-const SUPABASE_URL = 'https://fyhwypwrlgzrosbhccnp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5aHd5cHdybGd6cm9zYmhjY25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MzczNDQsImV4cCI6MjA2OTMxMzM0NH0.TSP5FmaGgARt50WB1TvJ2p8JPt-fWyUhQ8YI3SeyqXs';
+import { SUPABASE_CONFIG, validateSupabaseConfig } from '../config/supabase';
 
 export interface MerchantProfile {
   hedera_account_id: string; // Primary key
@@ -29,15 +26,16 @@ class SupabaseAuthService {
   private supabase: SupabaseClient;
 
   constructor() {
-    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    validateSupabaseConfig();
+    this.supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
   }
 
   /**
    * Check if Supabase is properly configured
    */
-  isConfigured(): boolean {
-    return SUPABASE_URL && SUPABASE_ANON_KEY && 
-           SUPABASE_URL.length > 0 && SUPABASE_ANON_KEY.length > 0;
+    isConfigured(): boolean {
+    return SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey &&
+      SUPABASE_CONFIG.url.length > 0 && SUPABASE_CONFIG.anonKey.length > 0;
   }
 
   /**

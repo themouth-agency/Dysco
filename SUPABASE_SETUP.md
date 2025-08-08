@@ -27,7 +27,7 @@ Add to your `Dysco/apps/backend/.env` file:
 ```bash
 # Supabase database credentials
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
 ### 4. Create Database Tables
@@ -164,7 +164,7 @@ CREATE INDEX idx_activity_type ON user_wallet_activity(activity_type);
 ## 🚨 Troubleshooting
 
 ### "Database not connected"
-- Check `.env` file has correct `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+- Check `.env` file has correct `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
 - Verify no trailing spaces in environment variables
 - Restart backend server after adding variables
 

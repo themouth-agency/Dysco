@@ -98,7 +98,7 @@ Set in Vercel dashboard:
 - `HEDERA_PRIVATE_KEY`
 - `HEDERA_ACCOUNT_ID`
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+- `SUPABASE_SECRET_KEY`
 - `NODE_ENV=production`
 
 ### Option 2: Railway
@@ -119,7 +119,7 @@ heroku create dysco-backend
 heroku config:set HEDERA_PRIVATE_KEY="your_key_here"
 heroku config:set HEDERA_ACCOUNT_ID="0.0.your_account"
 heroku config:set SUPABASE_URL="your_supabase_url"
-heroku config:set SUPABASE_ANON_KEY="your_supabase_key"
+heroku config:set SUPABASE_SECRET_KEY="your_supabase_secret_key"
 ```
 
 3. Deploy:

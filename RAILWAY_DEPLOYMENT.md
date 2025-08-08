@@ -27,7 +27,7 @@ In Railway dashboard → Variables tab, add:
 HEDERA_PRIVATE_KEY=your_hedera_private_key_here
 HEDERA_ACCOUNT_ID=0.0.your_account_id
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SECRET_KEY=your_supabase_secret_key_here
 PORT=3001
 NODE_ENV=production
 ```

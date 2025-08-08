@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { userWalletService } from '../services/userWallet';
+import { API_BASE_URL } from '../config/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -73,6 +74,48 @@ export default function DiscountCodesScreen() {
     Alert.alert('Copied!', `Discount code for ${campaignName} copied to clipboard`);
   };
 
+  const deleteDiscountCode = async (codeId: string, campaignName: string) => {
+    Alert.alert(
+      'Delete Discount Code',
+      `Are you sure you want to delete the discount code for "${campaignName}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const userCredentials = await userWalletService.getUserCredentials();
+              if (!userCredentials) {
+                Alert.alert('Error', 'User not authenticated');
+                return;
+              }
+
+              const response = await fetch(`${API_BASE_URL}/api/users/${userCredentials.walletData.hederaAccountId}/discount-codes/${codeId}`, {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              });
+
+              const data = await response.json();
+
+              if (data.success) {
+                Alert.alert('Deleted!', 'Discount code has been removed from your list');
+                await loadDiscountCodes(); // Refresh the list
+              } else {
+                Alert.alert('Error', data.error || 'Failed to delete discount code');
+              }
+            } catch (error) {
+              console.error('Error deleting discount code:', error);
+              Alert.alert('Error', 'Failed to delete discount code');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const formatDiscountValue = (type: string, value: number) => {
     switch (type) {
       case 'percentage':
@@ -95,12 +138,20 @@ export default function DiscountCodesScreen() {
     return (
       <View style={styles.codeCard}>
         <View style={styles.codeHeader}>
-          <Text style={styles.campaignName}>{campaignName}</Text>
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>
-              {formatDiscountValue(discountType, discountValue)}
-            </Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.campaignName}>{campaignName}</Text>
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountText}>
+                {formatDiscountValue(discountType, discountValue)}
+              </Text>
+            </View>
           </View>
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={() => deleteDiscountCode(item.id, campaignName)}
+          >
+            <Text style={styles.deleteButtonText}>✕</Text>
+          </TouchableOpacity>
         </View>
         
         <View style={styles.codeContainer}>
@@ -140,12 +191,12 @@ export default function DiscountCodesScreen() {
       style={styles.container}
     >
       <SafeAreaView style={styles.content}>
-        <View style={styles.header}>
+        {/* <View style={styles.header}>
           <Text style={styles.title}>💳 My Discount Codes</Text>
           <Text style={styles.subtitle}>
             Codes you've redeemed by burning NFTs
           </Text>
-        </View>
+        </View> */}
 
         {discountCodes.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -223,20 +274,39 @@ const styles = StyleSheet.create({
   codeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 16,
+  },
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
   },
   campaignName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1a1a1a',
-    flex: 1,
+    marginBottom: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#ff4757',
+    borderRadius: 8,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 36,
+    minHeight: 36,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   discountBadge: {
     backgroundColor: '#00C851',
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   discountText: {
     fontSize: 12,
