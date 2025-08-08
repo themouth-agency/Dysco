@@ -43,7 +43,7 @@ export default function UserSettingsScreen() {
   const handleAbout = () => {
     Alert.alert(
       'About Dysco',
-      'Dysco is a digital coupon platform built on Hedera Hashgraph.\n\nVersion 1.0.0\n\nSecure • Instant • Tradeable',
+      'Dysco is a digital coupon platform built by The Mouth Agency.\n\nVersion 0.1.0\n\nSecure • Instant • Tradeable',
       [{ text: 'OK' }]
     );
   };
