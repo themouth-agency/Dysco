@@ -100,13 +100,13 @@ export default function CampaignDashboardScreen({ navigation }: Props) {
   const getStatusColor = (campaign: Campaign): string => {
     if (!campaign.is_active) return '#999';
     if (isExpired(campaign.end_date)) return '#ff6b6b';
-    return '#51cf66';
+    return '#C3FF8B';
   };
 
   const getStatusText = (campaign: Campaign): string => {
-    if (!campaign.is_active) return 'Inactive';
-    if (isExpired(campaign.end_date)) return 'Expired';
-    return 'Active';
+    if (!campaign.is_active) return 'INACTIVE';
+    if (isExpired(campaign.end_date)) return 'EXPIRED';
+    return 'ACTIVE';
   };
 
   const handleCreateCampaign = () => {
@@ -124,8 +124,17 @@ export default function CampaignDashboardScreen({ navigation }: Props) {
     >
       <View style={styles.campaignHeader}>
         <Text style={styles.campaignName}>{campaign.name}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(campaign) }]}>
-          <Text style={styles.statusText}>{getStatusText(campaign)}</Text>
+        <View style={[
+          styles.statusBadge, 
+          { 
+            backgroundColor: getStatusColor(campaign),
+            borderColor: campaign.is_active && !isExpired(campaign.end_date) ? '#DFFFD5' : 'transparent'
+          }
+        ]}>
+          <Text style={[
+            styles.statusText,
+            { color: campaign.is_active && !isExpired(campaign.end_date) ? '#000' : '#fff' }
+          ]}>{getStatusText(campaign)}</Text>
         </View>
       </View>
 
@@ -173,14 +182,7 @@ export default function CampaignDashboardScreen({ navigation }: Props) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Campaign Dashboard</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleCreateCampaign}>
-          <Text style={styles.addButtonText}>+ New</Text>
-        </TouchableOpacity>
-      </View>
-
+    <View style={styles.container}>
       <FlatList
         data={campaigns}
         renderItem={renderCampaignCard}
@@ -191,7 +193,7 @@ export default function CampaignDashboardScreen({ navigation }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -200,30 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+
   listContainer: {
     padding: 16,
   },
@@ -258,10 +237,10 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 4,
+    borderWidth: 0.4,
   },
   statusText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },

@@ -104,22 +104,9 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
           <Stack.Screen
             name="MerchantDashboard"
             options={{ 
-              title: 'Dysco - Merchant',
-              headerRight: () => (
-                <View style={{ flexDirection: 'row', marginRight: 15 }}>
-                  <TouchableOpacity 
-                    onPress={handleSwitchRole}
-                    style={{ marginRight: 15 }}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 16 }}>Switch Role</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleMerchantLogout}>
-                    <Text style={{ color: '#fff', fontSize: 16 }}>Logout</Text>
-                  </TouchableOpacity>
-                </View>
-              )
+              headerShown: false
             }}
-          component={MerchantDashboardScreen}
+            component={MerchantDashboardScreen}
           />
           <Stack.Screen
             name="CreateCoupon"
@@ -144,7 +131,39 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
           <Stack.Screen
             name="CampaignDashboard"
             component={CampaignDashboardScreen}
-            options={{ title: 'Campaign Dashboard' }}
+            options={{ 
+              title: 'Campaign Dashboard',
+              headerStyle: {
+                backgroundColor: '#08090A',
+                height: 140,
+              },
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: 'bold',
+                fontSize: 18,
+              },
+              headerBackTitle: '',
+              headerBackTitleVisible: false,
+              headerLeft: ({ onPress }) => (
+                <TouchableOpacity onPress={onPress} style={{ marginLeft: 20, padding: 10 }}>
+                  <Text style={{ color: '#fff', fontSize: 24, fontWeight: '600' }}>←</Text>
+                </TouchableOpacity>
+              ),
+              headerRight: ({ navigation }) => (
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('CreateCampaign')}
+                  style={{ 
+                    marginRight: 20, 
+                    backgroundColor: '#A1FF9C',
+                    paddingHorizontal: 20,
+                    paddingVertical: 10,
+                    borderRadius: 20,
+                  }}
+                >
+                  <Text style={{ color: '#000', fontWeight: '600', fontSize: 14 }}>New</Text>
+                </TouchableOpacity>
+              ),
+            }}
           />
           <Stack.Screen
             name="CreateCampaign"
