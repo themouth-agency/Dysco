@@ -368,7 +368,7 @@ app.post('/api/coupons/mint', async (req, res) => {
     const tokenCreateReceipt = await tokenCreateResponse.getReceipt(hederaClient);
     const tokenId = tokenCreateReceipt.tokenId;
 
-    // Mint the NFT with metadata
+    // Create metadata file first
     const metadata = {
       name,
       description,
@@ -378,9 +378,14 @@ app.post('/api/coupons/mint', async (req, res) => {
       created_at: new Date().toISOString()
     };
 
+    // Generate unique metadata ID and save file
+    const metadataId = `coupon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const metadataUrl = await saveMetadataFile(metadataId, metadata);
+
+    // Mint the NFT with metadata URL (HIP-412 compliant)
     const tokenMintTx = new TokenMintTransaction()
       .setTokenId(tokenId!)
-      .setMetadata([Buffer.from(JSON.stringify(metadata))]);
+      .setMetadata([Buffer.from(metadataUrl)]);
 
     const mintResponse = await tokenMintTx.execute(hederaClient);
     const mintReceipt = await mintResponse.getReceipt(hederaClient);
@@ -389,6 +394,7 @@ app.post('/api/coupons/mint', async (req, res) => {
       success: true,
       tokenId: tokenId?.toString(),
       transactionId: mintResponse.transactionId.toString(),
+      metadataUrl,
       metadata
     });
 
