@@ -9,9 +9,8 @@
 // const API_BASE_URL = 'https://dysco-production.up.railway.app';
 
 // 🧪 Auto-detect environment (automatically switches between local and production)
-const API_BASE_URL = __DEV__ 
-  ? 'http://192.168.0.49:3001'  // Local when debugging
-  : 'https://dysco-production.up.railway.app';  // Railway when released
+// Temporarily using Railway for both dev and prod until local backend is configured
+const API_BASE_URL = 'https://dysco-production.up.railway.app';
 
 export { API_BASE_URL };
 
