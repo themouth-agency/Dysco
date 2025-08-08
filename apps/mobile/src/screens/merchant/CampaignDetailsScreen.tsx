@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  SafeAreaView,
   FlatList,
   RefreshControl,
   TextInput,
@@ -252,6 +251,48 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
     return { total, active, redeemed, expired, burned };
   };
 
+  const handleToggleCampaignStatus = async () => {
+    try {
+      const newStatus = !campaign.is_active;
+      console.log(`Toggling campaign ${campaignId} to ${newStatus ? 'active' : 'inactive'}`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaignId}/toggle-status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_active: newStatus,
+        }),
+      });
+
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error response:', errorText);
+        Alert.alert('Error', `Server error: ${response.status}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('Response data:', data);
+      
+      if (data.success) {
+        setCampaign({ ...campaign, is_active: newStatus });
+        Alert.alert(
+          'Success', 
+          `Campaign ${newStatus ? 'activated' : 'deactivated'} successfully`
+        );
+      } else {
+        Alert.alert('Error', data.error || 'Failed to update campaign status');
+      }
+    } catch (error) {
+      console.error('Error toggling campaign status:', error);
+      Alert.alert('Error', `Failed to update campaign status: ${error.message}`);
+    }
+  };
+
   const renderCouponItem = ({ item: coupon }: { item: Coupon }) => (
     <View style={styles.couponItem}>
       <View style={styles.couponHeader}>
@@ -281,11 +322,11 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
 
   if (loading || !campaign) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text>Loading campaign details...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -293,17 +334,7 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
   const campaignExpired = isExpired(campaign.end_date);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>
-          {campaign.name}
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
+    <View style={styles.container}>
       <ScrollView
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -395,8 +426,20 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </View>
 
+          {/* Middle row - Campaign Status */}
+          <View style={[styles.actionsRow, styles.actionsRowSpacing]}>
+            <TouchableOpacity
+              style={[styles.actionButton, campaign.is_active ? styles.deactivateButton : styles.activateButton]}
+              onPress={() => handleToggleCampaignStatus()}
+            >
+              <Text style={styles.actionButtonText}>
+                {campaign.is_active ? '⏸️ Deactivate Campaign' : '▶️ Activate Campaign'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Bottom row - Share */}
-          <View style={styles.actionsRow}>
+          <View style={[styles.actionsRow, styles.actionsRowSpacing]}>
             <TouchableOpacity
               style={[styles.actionButton, styles.shareButton]}
               onPress={handleShareCampaign}
@@ -474,7 +517,7 @@ export default function CampaignDetailsScreen({ navigation, route }: Props) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -488,29 +531,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginHorizontal: 16,
-  },
-  headerSpacer: {
-    width: 50,
-  },
+
   content: {
     flex: 1,
   },
@@ -634,6 +655,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  actionsRowSpacing: {
+    marginTop: 16,
+  },
   actionButton: {
     flex: 1,
     paddingVertical: 12,
@@ -647,8 +671,14 @@ const styles = StyleSheet.create({
   burnButton: {
     backgroundColor: '#ff6b6b',
   },
-  shareButton: {
+  activateButton: {
     backgroundColor: '#00C851',
+  },
+  deactivateButton: {
+    backgroundColor: '#ff9800',
+  },
+  shareButton: {
+    backgroundColor: '#6c757d',
   },
   actionButtonText: {
     color: '#fff',

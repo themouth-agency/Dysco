@@ -411,6 +411,8 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
     redemptionTransactionId: string;
     scannedAt: string;
     redemptionMethod: string;
+    discountCode?: string; // For discount code campaigns
+    campaignId?: string; // For linking to campaigns table
   }): Promise<void> {
     if (!this.supabase) {
       throw new Error('Database not connected');
@@ -425,12 +427,45 @@ CREATE INDEX idx_nft_token_serial ON nft_coupons(token_id, serial_number);
         redemption_transaction_id: redemptionData.redemptionTransactionId,
         scanned_at: redemptionData.scannedAt,
         redeemed_at: new Date().toISOString(),
-        redemption_method: redemptionData.redemptionMethod
+        redemption_method: redemptionData.redemptionMethod,
+        discount_code: redemptionData.discountCode,
+        campaign_id: redemptionData.campaignId
       });
 
     if (error) {
       throw new Error(`Failed to record redemption: ${error.message}`);
     }
+  }
+
+  /**
+   * Get user's redeemed discount codes
+   */
+  async getUserDiscountCodes(userAccountId: string): Promise<any[]> {
+    if (!this.supabase) {
+      throw new Error('Database not connected');
+    }
+
+    const { data: redemptions, error } = await this.supabase
+      .from('coupon_redemptions')
+      .select(`
+        *,
+        campaigns (
+          name,
+          description,
+          discount_type,
+          discount_value
+        )
+      `)
+      .eq('user_account_id', userAccountId)
+      .eq('redemption_method', 'discount_code')
+      .not('discount_code', 'is', null)
+      .order('redeemed_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to fetch user discount codes: ${error.message}`);
+    }
+
+    return redemptions || [];
   }
 
   /**

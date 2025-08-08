@@ -16,6 +16,8 @@ export interface Coupon {
   discountType?: 'percentage' | 'fixed_amount' | 'free_item' | 'other';
   discountCode?: string;
   redemptionType?: string;
+  campaignActive?: boolean;
+  campaignId?: string;
   // Legacy fields for compatibility
   discountPercent?: number;
   merchantId?: string;

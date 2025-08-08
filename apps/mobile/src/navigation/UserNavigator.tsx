@@ -13,6 +13,7 @@ import ClaimCouponScreen from '../screens/ClaimCouponScreen';
 import UserRedemptionHistoryScreen from '../screens/UserRedemptionHistoryScreen';
 import MnemonicBackupScreen from '../screens/MnemonicBackupScreen';
 import MnemonicVerificationScreen from '../screens/MnemonicVerificationScreen';
+import DiscountCodesScreen from '../screens/DiscountCodesScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -105,6 +106,16 @@ export const UserNavigator: React.FC<UserNavigatorProps> = ({ onLogout }) => {
           headerTintColor: '#fff',
           headerLeft: () => null, // Prevent going back during verification
           gestureEnabled: false
+        }}
+      />
+      <Stack.Screen
+        name="DiscountCodes"
+        component={DiscountCodesScreen}
+        options={{ 
+          title: 'My Discount Codes',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#667eea' },
+          headerTintColor: '#fff',
         }}
       />
     </Stack.Navigator>

@@ -321,7 +321,7 @@ export const getUserRedemptionHistory = async (userAccountId: string) => {
 };
 
 // Redeem discount code coupon (burn NFT and get discount code)
-export const redeemDiscountCodeCoupon = async (nftId: string, userAccountId: string, userPrivateKey: string) => {
+export const redeemDiscountCodeCoupon = async (nftId: string, userAccountId: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/coupons/redeem-discount-code`, {
       method: 'POST',
@@ -331,7 +331,6 @@ export const redeemDiscountCodeCoupon = async (nftId: string, userAccountId: str
       body: JSON.stringify({
         nftId,
         userAccountId,
-        userPrivateKey,
       }),
     });
 

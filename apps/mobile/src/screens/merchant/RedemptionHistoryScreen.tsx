@@ -7,7 +7,11 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
+  TouchableOpacity,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MerchantStackParamList } from '../../navigation/MerchantAuthNavigator';
 import { merchantService } from '../../services/merchantService';
@@ -138,15 +142,31 @@ export default function RedemptionHistoryScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Redemption History</Text>
-        <Text style={styles.subtitle}>
-          {redemptions.length > 0 
-            ? `${redemptions.length} redemption${redemptions.length > 1 ? 's' : ''}` 
-            : 'No redemptions yet'
-          }
-        </Text>
-      </View>
+      <LinearGradient
+        colors={['#08090A', '#1E261F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <SafeAreaView style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Redemption History</Text>
+            <Text style={styles.subtitle}>
+              {redemptions.length > 0 
+                ? `${redemptions.length} redemption${redemptions.length > 1 ? 's' : ''}` 
+                : 'No redemptions yet'
+              }
+            </Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
       <FlatList
         data={redemptions}
@@ -169,25 +189,48 @@ export default function RedemptionHistoryScreen({ navigation }: Props) {
   );
 }
 
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#059669',
-    padding: 20,
-    paddingTop: 40,
+    height: 140,
+    paddingTop: 0,
+  },
+  headerContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 65,
+    left: 20,
+    padding: 15,
+    zIndex: 10,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '600',
+  },
+  titleContainer: {
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: '#d1fae5',
+    textAlign: 'center',
   },
   listContainer: {
     padding: 16,

@@ -7,9 +7,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SvgXml } from 'react-native-svg';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { MerchantStackParamList } from '../../navigation/MerchantNavigator';
+import { MerchantStackParamList } from '../../navigation/MerchantAuthNavigator';
 import { merchantService } from '../../services/merchantService';
 
 type MerchantSettingsScreenNavigationProp = StackNavigationProp<MerchantStackParamList, 'MerchantSettings'>;
@@ -109,14 +113,50 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
     );
   }
 
+  // Dysco logo SVG
+  const dyscoLogoSvg = `<svg width="196" height="65" viewBox="0 0 196 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 39.7143L7.54286 32.1714L15.0857 39.7143L7.54286 47.2571L0 39.7143Z" fill="#00A90B"/>
+<path d="M15.0857 24.6286L22.6286 17.0857L30.1714 24.6286L22.6286 32.1714L15.0857 24.6286Z" fill="#00A90B"/>
+<path d="M30.1714 39.7143L37.7143 32.1714L45.2571 39.7143L37.7143 47.2571L30.1714 39.7143Z" fill="#00A90B"/>
+<path d="M15.0857 54.8L22.6286 47.2571L30.1714 54.8L22.6286 62.3429L15.0857 54.8Z" fill="#00A90B"/>
+<path d="M7.54286 24.6286L15.0857 17.0857L22.6286 24.6286L15.0857 31.5429L7.54286 24.6286Z" fill="#00A90B"/>
+<path d="M22.6286 39.7143L30.1714 32.1714L37.7143 39.7143L30.1714 47.2571L22.6286 39.7143Z" fill="#00A90B"/>
+<path d="M37.7143 24.6286L45.2571 17.0857L52.8 24.6286L45.2571 32.1714L37.7143 24.6286Z" fill="#00A90B"/>
+<path d="M30.1714 9.54286L37.7143 2L45.2571 9.54286L37.7143 17.0857L30.1714 9.54286Z" fill="#00A90B"/>
+<text x="65" y="35" font-family="Arial" font-size="20" font-weight="bold" fill="#FFFFFF">Dysco</text>
+</svg>`;
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Merchant Settings</Text>
-        <Text style={styles.subtitle}>
-          {merchantProfile?.name || 'Manage your account'}
-        </Text>
-      </View>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#08090A', '#1E261F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <SafeAreaView style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+
+          <View style={styles.logoRow}>
+            <SvgXml xml={dyscoLogoSvg} width={80} height={80 * (65/196)} />
+            <Text style={styles.businessText}>Business</Text>
+          </View>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Merchant Settings</Text>
+            <Text style={styles.subtitle}>
+              {merchantProfile?.name || 'Manage your account'}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      <ScrollView style={styles.contentContainer}>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
@@ -182,9 +222,12 @@ export default function MerchantSettingsScreen({ navigation }: Props) {
           <Text style={styles.signOutButtonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
+
+const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -192,19 +235,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#059669',
-    padding: 20,
-    paddingTop: 40,
+    height: height * 0.32,
+    paddingTop: 0,
+  },
+  headerContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 65,
+    left: 20,
+    padding: 15,
+    zIndex: 10,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '600',
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 15,
+  },
+  businessText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#00A90B',
+    marginLeft: 10,
+  },
+  titleContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: '#d1fae5',
+    textAlign: 'center',
+  },
+  contentContainer: {
+    flex: 1,
   },
   section: {
     marginBottom: 24,

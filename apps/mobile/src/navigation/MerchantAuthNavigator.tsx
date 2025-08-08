@@ -22,7 +22,7 @@ export type MerchantStackParamList = {
   RedemptionHistory: undefined;
   MerchantSettings: undefined;
   CampaignDashboard: undefined;
-  CreateCampaign: undefined;
+  CreateCampaign: { fillSampleData?: () => void };
   CampaignDetails: { campaignId: string };
 };
 
@@ -116,22 +116,49 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
           <Stack.Screen
             name="QRScanner"
             component={QRScannerScreen}
-            options={{ title: 'Scan Coupon' }}
+            options={{ 
+              title: 'Scan Coupon',
+              headerStyle: {
+                backgroundColor: '#08090A',
+                height: 140,
+              },
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: 'bold',
+                fontSize: 18,
+              },
+              headerBackTitle: '',
+              headerLeft: ({ onPress }) => (
+                <TouchableOpacity
+                  onPress={onPress}
+                  style={{
+                    marginLeft: 16,
+                    padding: 8,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '600' }}>←</Text>
+                </TouchableOpacity>
+              ),
+            }}
           />
           <Stack.Screen
             name="RedemptionHistory"
             component={RedemptionHistoryScreen}
-            options={{ title: 'Redemption History' }}
+            options={{ 
+              headerShown: false
+            }}
           />
           <Stack.Screen
             name="MerchantSettings"
             component={MerchantSettingsScreen}
-            options={{ title: 'Merchant Settings' }}
+            options={{ 
+              headerShown: false
+            }}
           />
           <Stack.Screen
             name="CampaignDashboard"
             component={CampaignDashboardScreen}
-            options={{ 
+            options={({ navigation }) => ({ 
               title: 'Campaign Dashboard',
               headerStyle: {
                 backgroundColor: '#08090A',
@@ -143,15 +170,14 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
                 fontSize: 18,
               },
               headerBackTitle: '',
-              headerBackTitleVisible: false,
               headerLeft: ({ onPress }) => (
                 <TouchableOpacity onPress={onPress} style={{ marginLeft: 20, padding: 10 }}>
                   <Text style={{ color: '#fff', fontSize: 24, fontWeight: '600' }}>←</Text>
                 </TouchableOpacity>
               ),
-              headerRight: ({ navigation }) => (
+              headerRight: () => (
                 <TouchableOpacity 
-                  onPress={() => navigation.navigate('CreateCampaign')}
+                                      onPress={() => navigation.navigate('CreateCampaign', {})}
                   style={{ 
                     marginRight: 20, 
                     backgroundColor: '#A1FF9C',
@@ -163,17 +189,73 @@ export const MerchantAuthNavigator: React.FC<MerchantAuthNavigatorProps> = ({ on
                   <Text style={{ color: '#000', fontWeight: '600', fontSize: 14 }}>New</Text>
                 </TouchableOpacity>
               ),
-            }}
+            })}
           />
-          <Stack.Screen
-            name="CreateCampaign"
-            component={CreateCampaignScreen}
-            options={{ title: 'Create Campaign' }}
-          />
+                    <Stack.Screen
+              name="CreateCampaign"
+              component={CreateCampaignScreen}
+              options={({ route }) => ({ 
+                title: 'Create Campaign',
+                headerStyle: {
+                  backgroundColor: '#08090A',
+                  height: 140,
+                },
+                headerTintColor: '#fff',
+                headerTitleStyle: {
+                  fontWeight: 'bold',
+                  fontSize: 18,
+                },
+                headerBackTitle: '',
+                headerLeft: ({ onPress }) => (
+                  <TouchableOpacity
+                    onPress={onPress}
+                    style={{
+                      marginLeft: 16,
+                      padding: 8,
+                    }}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '600' }}>←</Text>
+                  </TouchableOpacity>
+                ),
+                headerRight: () => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      // We'll need to pass this function from the component
+                      if (route.params && route.params.fillSampleData) {
+                        route.params.fillSampleData();
+                      }
+                    }}
+                    style={{
+                      marginRight: 16,
+                      padding: 8,
+                    }}
+                  >
+                    <Text style={{ color: '#00A90B', fontSize: 16, fontWeight: '600' }}>Sample</Text>
+                  </TouchableOpacity>
+                ),
+              })}
+            />
           <Stack.Screen
             name="CampaignDetails"
             component={CampaignDetailsScreen}
-            options={{ title: 'Campaign Details' }}
+            options={{ 
+              title: 'Campaign Details',
+              headerStyle: {
+                backgroundColor: '#08090A',
+                height: 140,
+              },
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: 'bold',
+                fontSize: 18,
+              },
+              headerBackTitle: '',
+              headerLeft: ({ onPress }) => (
+                <TouchableOpacity onPress={onPress} style={{ marginLeft: 20, padding: 10 }}>
+                  <Text style={{ color: '#fff', fontSize: 24, fontWeight: '600' }}>←</Text>
+                </TouchableOpacity>
+              ),
+            }}
           />
         </>
       )}

@@ -11,6 +11,7 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SvgXml } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
@@ -171,7 +172,22 @@ export default function MyCouponsScreen() {
                 try {
                   const redeemResponse = await api.redeemDiscountCodeCoupon(coupon.id, userCredentials.walletData.hederaAccountId);
                   if (redeemResponse.success) {
-                    Alert.alert('Success!', `Your discount code is: ${redeemResponse.discountCode}. You can copy it from the redemption history.`);
+                    const discountCode = redeemResponse.discountCode;
+                    Alert.alert(
+                      'Code Revealed! 🎉', 
+                      `Your discount code is:\n${discountCode}`,
+                      [
+                        { text: 'OK' },
+                        { 
+                          text: 'Copy Code', 
+                          onPress: async () => {
+                            await Clipboard.setStringAsync(discountCode);
+                            Alert.alert('Copied!', 'Discount code copied to clipboard');
+                          }
+                        },
+                        { text: 'View All Codes', onPress: () => navigation.navigate('DiscountCodes' as never) }
+                      ]
+                    );
                     onRefresh(); // Refresh coupons after redemption
                   } else {
                     Alert.alert('Redemption Failed', redeemResponse.error || 'Failed to redeem coupon for discount code.');
@@ -250,34 +266,59 @@ export default function MyCouponsScreen() {
     }
   };
 
-  const renderCoupon = ({ item }: { item: Coupon }) => (
-    <View style={styles.couponCard}>
-      <View style={styles.couponContent}>
-        <View style={styles.couponHeader}>
-          <Text style={styles.couponName}>{item.name || 'Coupon'}</Text>
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{formatDiscountInfo(item)}</Text>
+  const renderCoupon = ({ item }: { item: Coupon }) => {
+    const isDiscountCodeCampaign = item.redemptionType === 'discount_code';
+    
+    return (
+      <View style={styles.couponCard}>
+        <View style={styles.couponContent}>
+          <View style={styles.couponHeader}>
+            <Text style={styles.couponName}>{item.name || 'Coupon'}</Text>
+            <View style={styles.badgeContainer}>
+              {isDiscountCodeCampaign ? (
+                <View style={styles.secretBadge}>
+                  <Text style={styles.secretText}>🔒 SECRET CODE</Text>
+                </View>
+              ) : (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>{formatDiscountInfo(item)}</Text>
+                </View>
+              )}
+              {item.campaignActive === false && (
+                <View style={styles.inactiveBadge}>
+                  <Text style={styles.inactiveText}>INACTIVE</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          
+          <Text style={styles.merchantName}>
+            {item.merchant || 'Unknown Merchant'}
+          </Text>
+          
+          {isDiscountCodeCampaign && (
+            <Text style={styles.discountCodeHint}>
+              💰 Contains a secret discount code. Burn this NFT to reveal it!
+            </Text>
+          )}
+          
+          <View style={styles.couponFooter}>
+            <Text style={styles.expiryText}>
+              Expires {new Date(item.validUntil || Date.now()).toLocaleDateString()}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.redeemButton, isDiscountCodeCampaign && styles.burnButton]}
+              onPress={() => handleRedeemPress(item)}
+            >
+              <Text style={styles.redeemButtonText}>
+                {isDiscountCodeCampaign ? '🔥 Burn for Code' : 'Redeem'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
-        
-        <Text style={styles.merchantName}>
-          {item.merchant || 'Unknown Merchant'}
-        </Text>
-        
-        <View style={styles.couponFooter}>
-          <Text style={styles.expiryText}>
-            Expires {new Date(item.validUntil || Date.now()).toLocaleDateString()}
-          </Text>
-          <TouchableOpacity 
-            style={styles.redeemButton}
-            onPress={() => handleRedeemPress(item)}
-          >
-            <Text style={styles.redeemButtonText}>Redeem</Text>
-          </TouchableOpacity>
-        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const FilterButton = ({ 
     type, 
@@ -392,7 +433,15 @@ export default function MyCouponsScreen() {
       <View style={styles.content}>
         {/* My Coupons Section */}
         <View style={styles.couponsSection}>
-          <Text style={styles.sectionTitle}>My Coupons</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>My Coupons</Text>
+            <TouchableOpacity 
+              style={styles.discountCodesButton}
+              onPress={() => navigation.navigate('DiscountCodes' as never)}
+            >
+              <Text style={styles.discountCodesButtonText}>💳 My Codes</Text>
+            </TouchableOpacity>
+          </View>
           
           {/* Filter Buttons */}
           <View style={styles.filtersContainer}>
@@ -547,11 +596,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 400,
     color: '#1a1a1a',
-    marginBottom: 20,
+  },
+  discountCodesButton: {
+    backgroundColor: '#7c3aed',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  discountCodesButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   filtersContainer: {
     flexDirection: 'row',
@@ -608,6 +673,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  badgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   discountBadge: {
     backgroundColor: '#FFE68B',
     borderRadius: 4,
@@ -620,6 +690,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#1a1a1a', // Dark text on yellow background
+  },
+  inactiveBadge: {
+    backgroundColor: '#ff6b6b',
+    borderRadius: 4,
+    borderWidth: 0.4,
+    borderColor: '#ffebee',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  inactiveText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  secretBadge: {
+    backgroundColor: '#7c3aed', // Purple background for secret codes
+    borderRadius: 4,
+    borderWidth: 0.4,
+    borderColor: '#a855f7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  secretText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  discountCodeHint: {
+    fontSize: 12,
+    color: '#7c3aed',
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  burnButton: {
+    backgroundColor: '#ef4444', // Red background for burn action
   },
   merchantName: {
     fontSize: 14,

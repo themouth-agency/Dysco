@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -169,18 +169,13 @@ export default function CreateCampaignScreen({ navigation }: Props) {
     });
   };
 
+  // Pass the fillSampleData function to navigation params
+  useEffect(() => {
+    navigation.setParams({ fillSampleData });
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.cancelButton}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Create Campaign</Text>
-        <TouchableOpacity onPress={fillSampleData}>
-          <Text style={styles.sampleButton}>Sample</Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
@@ -415,28 +410,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  cancelButton: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  sampleButton: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
+
   content: {
     flex: 1,
   },
@@ -489,8 +463,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   typeButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#024E44',
+    borderColor: '#024E44',
   },
   discountTypeButton: {
     flex: 1,
@@ -519,7 +493,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   createButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#024E44',
     margin: 16,
     paddingVertical: 16,
     borderRadius: 8,

@@ -724,10 +724,7 @@ export class MerchantService {
       // Prepare all metadata in advance
       const metadataEntries = [];
       for (let i = 0; i < quantity; i++) {
-        let discountCode;
-        if (campaign.campaign_type === 'discount_code') {
-          discountCode = `${campaign.discount_type.toUpperCase()}_${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
-        }
+        // Don't generate discount codes in metadata - they will be generated securely upon redemption
 
         const metadataId = `${campaign.id}_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
         const baseUrl = process.env.NODE_ENV === 'production' 
@@ -789,43 +786,59 @@ export class MerchantService {
           } as any
         };
 
-        if (discountCode) {
-          metadata.attributes.push({
-            trait_type: "Discount Code",
-            value: discountCode
-          });
-          metadata.properties.discountCode = discountCode;
-        }
-
+        // Do not include discount codes in metadata for security
+        
         metadataEntries.push({
           metadataId,
           metadataUrl,
           metadata,
-          discountCode
+          discountCode: null // Discount codes generated only upon redemption
         });
       }
 
-      // Bulk mint all NFTs in one transaction
-      const metadataBuffers = metadataEntries.map(entry => Buffer.from(entry.metadataUrl));
-      
-      const mintTransaction = new TokenMintTransaction()
-        .setTokenId(collectionId)
-        .setMetadata(metadataBuffers)
-        .setMaxTransactionFee(new Hbar(20)); // Higher fee for bulk operation
-
-      const mintResponse = await mintTransaction.execute(this.client);
-      const mintReceipt = await mintResponse.getReceipt(this.client);
-
-      if (!mintReceipt.serials || mintReceipt.serials.length === 0) {
-        throw new Error('Failed to get minted NFT serial numbers');
+      // Split into batches of 10 (Hedera limit)
+      const BATCH_SIZE = 10;
+      const batches = [];
+      for (let i = 0; i < metadataEntries.length; i += BATCH_SIZE) {
+        batches.push(metadataEntries.slice(i, i + BATCH_SIZE));
       }
 
-      console.log(`✅ Bulk minted ${mintReceipt.serials.length} campaign coupon NFTs`);
+      console.log(`📦 Processing ${quantity} coupons in ${batches.length} batch(es) of max ${BATCH_SIZE}`);
+
+      const allSerials: number[] = [];
+      
+      // Process each batch
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        const metadataBuffers = batch.map(entry => Buffer.from(entry.metadataUrl));
+        
+        console.log(`🔄 Processing batch ${batchIndex + 1}/${batches.length} with ${batch.length} coupons`);
+        
+        const mintTransaction = new TokenMintTransaction()
+          .setTokenId(collectionId)
+          .setMetadata(metadataBuffers)
+          .setMaxTransactionFee(new Hbar(20)); // Higher fee for bulk operation
+
+        const mintResponse = await mintTransaction.execute(this.client);
+        const mintReceipt = await mintResponse.getReceipt(this.client);
+
+        if (!mintReceipt.serials || mintReceipt.serials.length === 0) {
+          throw new Error(`Failed to get minted NFT serial numbers for batch ${batchIndex + 1}`);
+        }
+
+        // Collect serials from this batch
+        const batchSerials = mintReceipt.serials.map(serial => serial.toNumber());
+        allSerials.push(...batchSerials);
+        
+        console.log(`✅ Batch ${batchIndex + 1}/${batches.length} minted ${batchSerials.length} NFTs`);
+      }
+
+      console.log(`✅ All batches completed! Total minted: ${allSerials.length} campaign coupon NFTs`);
 
       // Save metadata files and database records for each minted NFT
-      for (let i = 0; i < mintReceipt.serials.length; i++) {
+      for (let i = 0; i < allSerials.length; i++) {
         try {
-          const serialNumber = mintReceipt.serials[i].toNumber();
+          const serialNumber = allSerials[i];
           const nftId = `${collectionId}:${serialNumber}`;
           const entry = metadataEntries[i];
 
@@ -856,7 +869,7 @@ export class MerchantService {
                 merchant_account_id: merchantHederaAccountId,
                 owner_account_id: undefined,
                 redemption_status: 'active',
-                discount_code: entry.discountCode,
+                discount_code: undefined, // No longer stored in database - generated on redemption
                 metadata: entry.metadata
               });
             } catch (dbError) {

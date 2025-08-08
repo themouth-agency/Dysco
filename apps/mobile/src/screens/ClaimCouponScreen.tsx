@@ -119,7 +119,7 @@ export default function ClaimCouponScreen({ navigation, route }: Props) {
         error.message || 'Failed to claim coupon. It might already be claimed or expired.',
         [
           { text: 'OK' },
-          { text: 'View My Coupons', onPress: () => navigation.navigate('MyCoupons') }
+          { text: 'View My Coupons', onPress: () => navigation.navigate('MainTabs', { screen: 'MyCoupons' }) }
         ]
       );
     } finally {
@@ -227,7 +227,7 @@ export default function ClaimCouponScreen({ navigation, route }: Props) {
             <View style={styles.actions}>
               <TouchableOpacity
                 style={styles.primaryButton}
-                onPress={() => navigation.navigate('MyCoupons')}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'MyCoupons' })}
               >
                 <Text style={styles.primaryButtonText}>View My Coupons</Text>
               </TouchableOpacity>

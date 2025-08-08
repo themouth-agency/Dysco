@@ -1,0 +1,57 @@
+{
+  "name": "Discount code",
+  "description": "Get amazing discounts on all summer items",
+  "image": "https://example.com/summer-sale.jpg",
+  "type": "object",
+  "attributes": [
+    {
+      "trait_type": "Campaign ID",
+      "value": "camp_1754651221540_jafmqrosd"
+    },
+    {
+      "trait_type": "Campaign Name",
+      "value": "Discount code"
+    },
+    {
+      "trait_type": "Discount Type",
+      "value": "percentage"
+    },
+    {
+      "trait_type": "Discount Value",
+      "value": "20"
+    },
+    {
+      "trait_type": "Redemption Type",
+      "value": "discount_code"
+    },
+    {
+      "trait_type": "Expires",
+      "value": "2025-09-08T00:00:00"
+    },
+    {
+      "trait_type": "Max Redemptions Per User",
+      "value": "10"
+    },
+    {
+      "trait_type": "Merchant",
+      "value": "Central Perk Coffee"
+    },
+    {
+      "trait_type": "Discount Code",
+      "value": "PERCENTAGE_H9BTNQ15"
+    }
+  ],
+  "properties": {
+    "merchant": "Central Perk Coffee",
+    "discountType": "percentage",
+    "discountValue": 20,
+    "campaignId": "camp_1754651221540_jafmqrosd",
+    "campaignName": "Discount code",
+    "expiresAt": "2025-09-08T00:00:00",
+    "validUntil": "2025-09-08T00:00:00",
+    "redemptionType": "discount_code",
+    "maxRedemptionsPerUser": 10,
+    "merchantAccountId": "0.0.6494888",
+    "discountCode": "PERCENTAGE_H9BTNQ15"
+  }
+}
