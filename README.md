@@ -180,6 +180,9 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_public_key
 
 ## 🔮 Future Roadmap
 
+- **UI Update**
+- **Referral system**: with built-in sales commissions
+- **API suite**: for seamless affiliate and store integration (online and brick & mortar)
 - **Loyalty Programs**: NFT-based loyalty point systems
 - **Cross-Merchant Offers**: Collaborative campaigns between merchants
 - **AI Recommendations**: Personalized coupon discovery
