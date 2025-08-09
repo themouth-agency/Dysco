@@ -170,6 +170,7 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_public_key
 2. **Premium Features**: Advanced analytics, custom branding
 3. **Marketplace Fees**: Commission on secondary market trades
 4. **Single NFT collection**: limiting token associations and token creation costs
+5. **Mouth Ecosystem Integrations**: Revenue from cross-product campaigns and shared features
 
 ## 🎉 What Makes This Special
 
